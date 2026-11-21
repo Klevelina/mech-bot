@@ -70,3 +70,14 @@ LATE_FIRE_R = 80.0     # late game: shoot anything this close (was 50 m)
 AVOID_BETWEEN = True   # never stand between two visible enemies (>120 deg apart): step out of their line
 OVERWATCH = True       # prefer parking spots with a long view (up to 200 m) down an open direction; face it
 OVERWATCH_W = 25.0     # m of extra walking accepted for a 200 m view
+
+# ---- rooftop camping (house bots know where we are: be where they can't reach and can barely see)
+ROOF = True
+ROOF_FROM = 20.0       # match time: a short loot run, then go up
+ROOF_RUSH = True       # walking to the roof outranks fight positioning (shooting still happens; escape is higher)
+ROOF_MAX_EXPO = 0.35   # camping spot seen from at most this share of the ground test points
+ROOF_MIN_CIRCLE = 40.0  # next circle smaller than this: come down / don't go up
+ROOF_MAX_WALK = 250.0  # m to the foot of the wall
+ROOF_ENERGY_MARGIN = 20.0
+ROOF_CLIMB_TIMEOUT = 8.0  # s of trying to climb before giving up on that roof
+ROOF_LEAVE_SLACK = 15.0  # s: leave the roof this long before the zone edge (minus walking time) arrives
