@@ -96,8 +96,7 @@ class CombatMixin:
         bd = math.hypot(ex - x, ey - y) or 1.0
         ux, uy = (ex - x) / bd, (ey - y) / bd
         sx, sy = -uy * self.cm_side, ux * self.cm_side  # strafe direction
-        lo, hi = band(our_role(me["weapons"]), m.get("weapons"))
-        pref = max(15.0, (lo + hi) / 2.0)
+        pref = self.allin_range(me, m)
         scale = 1.0 + self.size_per_cube * m.get("cubes", 0)
         tz = m["pos"][2] + 4.5 * scale
         mh = me["stats"].get("muzzle_height", 7.0)

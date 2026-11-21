@@ -255,6 +255,19 @@ class FightMixin:
                 best, bd = (it["x"], it["y"]), d
         return best
 
+    def allin_range(self, me, m):
+        """All in: the distance we fight m from, by what we hold."""
+        kinds = {w["kind"] for w in me["weapons"] if w}
+        if m["kind"] == "npc":
+            return ALLIN_RANGE["npc"]
+        if "lightning" in kinds and me["energy"] > 12:
+            return ALLIN_RANGE["lightning"]
+        r = ALLIN_RANGE["laser"] if "laser" in kinds else ALLIN_RANGE["gun"]
+        if "lightning" not in kinds:
+            for k in (m.get("weapons") or []):
+                r = max(r, ALLIN_RANGE_VS.get(k, 0.0))
+        return r
+
     def allin_retreat(self, me, m, t, t_start, hp_frac):
         """SQUAD_ALL_IN: the one retreat rule. (x, y) to back off to, or None to keep fighting."""
         x, y = me["pos"][0], me["pos"][1]
@@ -297,7 +310,9 @@ class FightMixin:
         if not engage:
             return None
         pref = HUNT_RANGE.get(self.style, 70.0)
-        if PLAYBOOK:
+        if getattr(self, "all_in", False):
+            pref = self.allin_range(me, m)
+        elif PLAYBOOK:
             lo, hi = band(our_role(me["weapons"]), theirs)
             pref = max(15.0, (lo + hi) / 2.0)
         if self.can_hit(me, m):
@@ -674,7 +689,9 @@ class FightMixin:
                 others_on_us = True
                 break
             pref = HUNT_RANGE.get(self.style, 70.0)
-            if PLAYBOOK:  # close to the middle of the matchup's band
+            if all_in:
+                pref = self.allin_range(me, m)
+            elif PLAYBOOK:  # close to the middle of the matchup's band
                 lo, hi = band(our_role(me["weapons"]), m.get("weapons"))
                 pref = max(15.0, (lo + hi) / 2.0)
             capturing = t - self.capturers.get(m["id"], -1e9) < 3.0  # about to be healed by a drop
@@ -745,6 +762,9 @@ class FightMixin:
                     self.fight_mode = "AVOID"
                     return
         self.fight_mode = "FIGHTMOVE"
+        if all_in:
+            self.fight_goal = None  # combat movement (combat.py) keeps our range every decision
+            return
         if PLAYBOOK and m["kind"] == "mech":
             # too close for this matchup -> back off to the band (behind cover if one is near)
             lo, hi = band(our_role(me["weapons"]), theirs)

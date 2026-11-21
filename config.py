@@ -120,6 +120,21 @@ COMBAT_DODGE_S = 0.7     # sidestep bullets that would hit us within this many s
 # modes that keep their own movement (retreat, finishing, cubes, escapes, drop contests, pursuit out of sight)
 COMBAT_MOVE_SKIP = ("RETREAT", "RUSH", "FIGHTCUBE", "FINISH", "ESCAPE", "CONTEST", "SNIPE", "PURSUE", "DISENGAGE",
                     "HIDE", "HIDDEN", "VANISH", "drop", "DROPWATCH")
+# ---- squad all in, the rest of the plan:
+# fight distance by what we hold (not the playbook bands): lightning (with energy) close, laser long, gun mid;
+# without lightning stay out of an enemy lightning's / mortar's comfort zone; drones at their own distance
+ALLIN_RANGE = {"lightning": 28.0, "laser": 120.0, "gun": 85.0, "npc": 58.0}
+ALLIN_RANGE_VS = {"lightning": 64.0, "mortar": 80.0}  # at least this far from these (when we have no lightning)
+ALLIN_SAFE_S = 3.0       # loot again this long after the last threat (SAFE_AFTER otherwise)
+ALLIN_LOOT_R = 150.0     # loot this far in every phase (crates included)
+ALLIN_DRONE_HP = 0.5     # farm drones only above this HP fraction
+ALLIN_NO_DROPS = True    # skip supply drops and drop contests (they pull us into the open for 4 s)
+ALLIN_NO_EXPLORE = True  # no exploring for loot: hold cover / loot what we've seen
+# upgrade picks vs the squad: survival first, then the laser (if we hold one), then the gun
+ALLIN_UPGRADES_LASER = ["plating", "armor", "laser_damage", "laser_charge", "nanites", "gun_damage", "gun_rate",
+                        "lightning_efficiency", "lightning_range", "servos", "gun_mag", "gun_velocity", "gyros"]
+ALLIN_UPGRADES = ["plating", "armor", "gun_damage", "nanites", "gun_rate", "lightning_efficiency", "lightning_range",
+                  "laser_damage", "servos", "laser_charge", "gun_mag", "gun_velocity", "gyros"]
 KILL_PILE = True       # (any match) our kill drops its cubes (+2) and weapons where it died: loot target right away
 
 DROP_WAIT_CALM = True  # FREE-FOR-ALL ONLY (vs the squad, 2+ enemies at a drop are hunters coming for us, not a fight):
@@ -174,7 +189,7 @@ RELOAD_BEFORE_HUNT = True  # gun-only: don't go hunting with less than this frac
 RELOAD_HUNT_FRAC = 0.5
 
 # ---- map & items
-MORTAR_USE = True      # take a mortar into an empty slot; lob over cover / at slow or bunched targets
+MORTAR_USE = False     # (True until the bundle build) take a mortar into an empty slot; lob over cover / at slow or bunched targets
 MORTAR_MIN_DIST = 25.0  # never shell anything closer (our own splash and knock-back)
 MORTAR_MAX_DIST = 230.0
 DODGE_MORTAR = True    # leave the predicted landing spot of incoming shells (laser sidestep stays with DODGE)
