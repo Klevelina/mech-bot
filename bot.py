@@ -312,6 +312,13 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             dgoal = math.hypot(g[0] - x, g[1] - y)
             stop_r = 2.0
             mode = "FINISH"
+        elif FIGHT_CUBES and self.all_in and mechs and self.fight_mode not in ("RETREAT", "RUSH") and \
+                self.fight_cube(me) is not None:
+            g = self.fight_cube(me)  # all in: a cube close by mid-fight is +4% HP and damage right now
+            self.set_goal(g, x, y)
+            dgoal = math.hypot(g[0] - x, g[1] - y)
+            stop_r = 1.0
+            mode = "FIGHTCUBE"
         elif self.fight_goal is not None:
             self.set_goal(self.fight_goal, x, y)
             dgoal = math.hypot(self.fight_goal[0] - x, self.fight_goal[1] - y)
@@ -544,6 +551,8 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
                     fire = [False, False]  # late: keep regenerating, don't start fights we can't end fast
                 if mode == "DROPWATCH" and is_mech and t - self.attackers.get(m["id"], -1e9) > 3.0:
                     fire = [False, False]  # waiting out a fight at a drop: don't join it unless shot at
+                if LASER_KILLSHOT and is_mech:
+                    fire = self.laser_killshot(me, m, aim, h, size, fire)
                 act["fire"] = fire
                 if LEARN_AIM and is_mech and speed and any(f and w and w["kind"] == "gun" for f, w in zip(fire, weapons)):
                     self.aim.record(t, m, tt)

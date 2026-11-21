@@ -101,6 +101,13 @@ ALLIN_LOW_HP = 0.35      # ... with the target at least 10 points of HP fraction
 ALLIN_TARGET_LOW = 0.25  # never retreat from a target below this (and us above 20%, at most 2 near)
 ALLIN_BACK_S = 1.5
 ALLIN_COVER_R = 45.0     # retreat to a spot within this far that the enemies in sight can't see (else straight away)
+# laser: let go early when what's charged already kills the target (x margin), instead of giving it time to duck away
+LASER_KILLSHOT = True
+LASER_KILLSHOT_MARGIN = 0.85
+# squad all in: walk over loose cubes close by during a fight (each is +4% HP and damage at once)
+FIGHT_CUBES = True
+FIGHT_CUBES_R = 55.0     # this close
+FIGHT_CUBES_HURT = 0.5   # x this below half HP
 KILL_PILE = True       # (any match) our kill drops its cubes (+2) and weapons where it died: loot target right away
 
 DROP_WAIT_CALM = True  # FREE-FOR-ALL ONLY (vs the squad, 2+ enemies at a drop are hunters coming for us, not a fight):

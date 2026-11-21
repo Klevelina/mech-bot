@@ -208,6 +208,53 @@ class FightMixin:
                 best, bs = m, s
         return best
 
+    def laser_killshot(self, me, m, aim, dist, size, fire):
+        """LASER_KILLSHOT: our laser is charging and what's in it already kills the target (with a safety margin):
+        let go now (release fires) instead of charging on and giving it time to duck away."""
+        cur = me["aim"]
+        tol = max(0.015, math.atan2(size, max(dist, 1.0)))
+        if abs(wrap(cur[0] - aim[0])) > tol or abs(cur[1] - aim[1]) > tol * 1.5:
+            return fire  # not on target yet
+        hp = m.get("hp")
+        if not hp:
+            return fire
+        for i, w in enumerate(me["weapons"]):
+            if not w or w["kind"] != "laser":
+                continue
+            st, charge = w["stats"], w.get("charge", 0.0)
+            full = st.get("charge", 0.75)
+            if charge < st.get("min_charge", 0.15) or charge >= full or dist > st.get("range", 280) * 0.97:
+                continue
+            frac = st.get("min_frac", 0.35) + (1 - st.get("min_frac", 0.35)) * charge / full
+            dmg = st.get("damage", 315) * frac * (1 + self.cfg["cubes"].get("damage_per_cube", 0.04) *
+                                                   min(me.get("cubes", 0), self.cfg["cubes"].get("stat_cap", 10)))
+            if "mortar" in (m.get("weapons") or []):
+                dmg *= 1 + st.get("cookoff", 0.6)
+            if self._behind_us(me, m):
+                dmg *= self.cfg["mech"].get("rear_mult", 1.5)
+            if dmg * LASER_KILLSHOT_MARGIN >= hp:
+                fire = list(fire)
+                fire[i] = False  # release: the beam goes out now
+        return fire
+
+    def _behind_us(self, me, m):
+        """We're outside m's front arc (its back / side is to us): our hits do rear damage."""
+        x, y = me["pos"][0], me["pos"][1]
+        return abs(wrap(math.atan2(y - m["pos"][1], x - m["pos"][0]) - m["aim"][0])) > math.pi / 2
+
+    def fight_cube(self, me):
+        """FIGHT_CUBES: the closest loose cube within reach mid-fight (closer when we're hurt), or None."""
+        x, y = me["pos"][0], me["pos"][1]
+        r = FIGHT_CUBES_R * (FIGHT_CUBES_HURT if me["hp"] < 0.5 * me["max_hp"] else 1.0)
+        best, bd = None, r
+        for it in self.mem.items.values():
+            if it["kind"] != "cube":
+                continue
+            d = math.hypot(it["x"] - x, it["y"] - y)
+            if d < bd and abs(it["z"] - me["pos"][2]) < 4.0:
+                best, bd = (it["x"], it["y"]), d
+        return best
+
     def allin_retreat(self, me, m, t, t_start, hp_frac):
         """SQUAD_ALL_IN: the one retreat rule. (x, y) to back off to, or None to keep fighting."""
         x, y = me["pos"][0], me["pos"][1]
