@@ -550,6 +550,8 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             aim, h = self.aim_at(me, tpos, m["vel"], zoff if zoff is not None else 4.5 * scale, speed, k)
             act["aim"] = aim
             no_shot = zoff is None  # target behind cover right now: a free moment to reload
+            if zoff is None and LASER_PRECHARGE and is_mech:
+                act["fire"] = self.laser_precharge(me)  # out of sight for the moment: have a full beam ready
             if zoff is not None:
                 tt = h / speed if speed else 0.0
                 gun_ok = True
