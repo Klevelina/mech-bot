@@ -211,47 +211,6 @@ class Nav:
 
         self.surf, self.roof, self.blocked, self.mask, self.extra, self.comp = surf, roof, blocked, mask, extra, comp
         self.ftop, self.fbase, self.sub, self.SW, self.SH = ftop, fbase, sub, SW, SH
-
-        # --- trees: crowns (vertical cylinders) for concealment; cells under crowns that reach mech height
-        rules = world.get("rules", {})
-        dens = float(rules.get("canopyDensity", 0.35))
-        blk = float(rules.get("canopyBlockT", 0.25))
-        self.crown_block = math.log(1.0 / max(1e-3, blk)) / max(1e-3, dens)  # m of crown that blocks a line
-        self.trees = []
-        self.tree_bins = {}
-        tree_cells = {}
-        tr = world.get("trees") or {}
-        fl = tr.get("fields") or []
-        data = tr.get("data") or []
-        if fl and data:
-            k = len(fl)
-            ix = {name: fl.index(name) for name in ("x", "y", "z", "height", "crownR", "crownBase") if name in fl}
-            icx = fl.index("crownX") if "crownX" in fl else ix["x"]
-            icy = fl.index("crownY") if "crownY" in fl else ix["y"]
-            for n_t in range(len(data) // k):
-                row = data[n_t * k:(n_t + 1) * k]
-                tz = row[ix["z"]]
-                zb, zt = tz + row[ix["crownBase"]], tz + row[ix["height"]]
-                cx_, cy_, r_ = row[icx], row[icy], row[ix["crownR"]]
-                if r_ <= 0.5 or zt - zb < 2.0:
-                    continue
-                ti = len(self.trees)
-                self.trees.append((cx_, cy_, r_, zb, zt))
-                self.tree_bins.setdefault((int(cx_ // 20), int(cy_ // 20)), []).append(ti)
-                # standable cells under a crown that covers a mech's body (center 4.5 m .. top 9 m)
-                if zb < tz + 5.0 and zt > tz + 9.0:
-                    c0 = self.cell_of(cx_, cy_)
-                    j0, i0 = divmod(c0, W)
-                    rr = int(r_ * 0.8 / cell) + 1
-                    for dj in range(-rr, rr + 1):
-                        for di in range(-rr, rr + 1):
-                            i, j = i0 + di, j0 + dj
-                            if 0 <= i < W and 0 <= j < H:
-                                c = j * W + i
-                                px, py = self.center(c)
-                                if comp[c] == self.main and math.hypot(px - cx_, py - cy_) < r_ * 0.8:
-                                    tree_cells[c] = (px, py)
-        self.tree_cells = [(c, p[0], p[1]) for c, p in tree_cells.items()]
         self.cover = cover
         self.build_s = time.perf_counter() - t0
         _log(f"nav: {W}x{H} cells, {len(sizes)} comps, main={sizes[self.main] if sizes else 0} cells, "
@@ -334,51 +293,6 @@ class Nav:
                 sy += dy
         face = math.atan2(sy, sx) if n_open else None
         return n_open, face
-
-    def conceal(self, c, dirs=8, reach=40.0):
-        """Fraction of `dirs` horizontal directions from which a mech standing at cell c is hidden by tree crowns
-        (both its center and top behind >= crown_block m of canopy within `reach` m). Only matters for viewers
-        beyond the 45 m proximity sensors, which see through canopy."""
-        px, py = self.center(c)
-        z0 = self.surf[c]
-        near = []
-        bx, by = int(px // 20), int(py // 20)
-        R = int(reach // 20) + 1
-        for dx in range(-R, R + 1):
-            for dy in range(-R, R + 1):
-                near.extend(self.tree_bins.get((bx + dx, by + dy), ()))
-        if not near:
-            return 0.0
-        trees = [self.trees[i] for i in near]
-        hidden = 0
-        for k in range(dirs):
-            a = 2 * math.pi * k / dirs
-            ux, uy = math.cos(a), math.sin(a)
-            ok = True
-            for h in (z0 + 4.5, z0 + 9.0):
-                L = 0.0
-                for cx_, cy_, r_, zb, zt in trees:
-                    if not (zb <= h <= zt):
-                        continue
-                    # ray from the viewer side: points P + u*s, s in [0, reach] (s = distance from us toward viewer)
-                    ox, oy = px - cx_, py - cy_
-                    bq = ox * ux + oy * uy
-                    cq = ox * ox + oy * oy - r_ * r_
-                    disc = bq * bq - cq
-                    if disc <= 0:
-                        continue
-                    sq = math.sqrt(disc)
-                    s1, s2 = max(0.0, -bq - sq), min(reach, -bq + sq)
-                    if s2 > s1:
-                        L += s2 - s1
-                        if L >= self.crown_block:
-                            break
-                if L < self.crown_block:
-                    ok = False
-                    break
-            if ok:
-                hidden += 1
-        return hidden / dirs
 
     safe = None  # (cx, cy, r): hiding/flanking spots must be inside this circle (set by the bot from the zone)
 
