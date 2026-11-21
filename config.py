@@ -147,6 +147,16 @@ ALLIN_STRIP = True
 KILL_PILE_FIRST_R = 120.0  # mid-fight: our kill's pile (its cubes + 2) within this far comes before anything but retreat
 ALLIN_DRONE_V = 12.0       # a drone (2 cubes, weak shooter) is worth this (POWER_DRONE_V otherwise), any phase
 CUBE_UPGRADES_UNTIL = 10   # below this many cubes: plating and our weapon's damage first
+# squad all in, gear first: the first GEAR_UNTIL s we don't start fights with "harmless" mechs (dealt us under
+# GEAR_HARM_DMG, no laser within GEAR_LASER_R, further than GEAR_CLOSE_R): they don't stop our looting and aren't
+# targets; weapons count from GEAR_WEAPON_R, lasers from GEAR_LASER_SEEK_R. Anyone else is fought as usual
+GEAR_FIRST = True
+GEAR_UNTIL = 120.0
+GEAR_HARM_DMG = 150.0
+GEAR_LASER_R = 170.0
+GEAR_CLOSE_R = 55.0
+GEAR_WEAPON_R = 400.0
+GEAR_LASER_SEEK_R = 300.0
 KILL_PILE = True       # (any match) our kill drops its cubes (+2) and weapons where it died: loot target right away
 
 DROP_WAIT_CALM = True  # FREE-FOR-ALL ONLY (vs the squad, 2+ enemies at a drop are hunters coming for us, not a fight):

@@ -264,6 +264,17 @@ class FightMixin:
                 best, bd = (it["x"], it["y"]), d
         return best
 
+    def gear_harmless(self, me, m):
+        """GEAR_FIRST: m hasn't hurt us much, carries no laser close by and isn't on top of us."""
+        x, y = me["pos"][0], me["pos"][1]
+        d = math.hypot(m["pos"][0] - x, m["pos"][1] - y)
+        if d < GEAR_CLOSE_R:
+            return False
+        if "laser" in (m.get("weapons") or []) and d < GEAR_LASER_R:
+            return False
+        dealt = sum(a for _, a in self.dmg_log.get(m["id"], ()))
+        return dealt < GEAR_HARM_DMG
+
     def allin_range(self, me, m):
         """All in: the distance we fight m from, by what we hold."""
         kinds = {w["kind"] for w in me["weapons"] if w}
