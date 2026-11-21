@@ -2,7 +2,7 @@
 import math
 
 from config import LIGHTNING_FIRST, PLAYBOOK, DROP_GUN_FOR_PAIR, MORTAR_USE, UPGRADE_BY_LOADOUT, \
-    POWER, POWER_WEAPON_V, POWER_DRONE_V, POWER_R
+    POWER, POWER_WEAPON_V, POWER_DRONE_V, POWER_R, POWER_MORE, POWER_CRATE_V
 
 # What a found item is worth before distance (rough "cubes" scale).
 VALUE = {"cube": 3.0, "crate": 2.5, "npc": 5.0, "pile": 6.0}  # a drone drops 2 cubes
@@ -186,11 +186,13 @@ class Memory:
                         v = max(v, 6.0)  # first special of any kind: both are a big step up from the gun
             else:
                 v = VALUE[k]
+                if POWER_MORE and k == "crate":
+                    v = POWER_CRATE_V  # a cube plus a 50% chance of a weapon
             reach = max_dist
             if POWER:
                 if k == "pickup" and no_special and it["wkind"] in SPECIALS:
                     v, reach = POWER_WEAPON_V, max(max_dist, POWER_R)  # a good weapon first (any phase)
-                elif k == "npc" and phase == "early":
+                elif k == "npc" and (phase == "early" or (POWER_MORE and phase == "mid")):
                     v, reach = POWER_DRONE_V, max(max_dist, POWER_R)  # then drones: 2 cubes each, weak shooters
             ix, iy = it["x"], it["y"]
             dist = math.hypot(ix - x, iy - y)

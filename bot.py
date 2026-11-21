@@ -92,6 +92,7 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         self.drop_check_t = -1e9
         self.drop_banned = set()
         self.drop_stage = {}    # drop id -> where to wait for it
+        self.drop_watch = {}    # drop id -> where to wait out a fight at it (DROP_WAIT_CALM)
         self.contest = None     # (goal, drop id) while contesting someone else's capture
         self.capturers = {}     # mech id -> last time it was capturing a drop (don't hunt into its full-HP payout)
         self.dmg_log = {}       # attacker id -> deque of (t, amount)
@@ -281,7 +282,10 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             dgoal = math.hypot(self.fight_goal[0] - x, self.fight_goal[1] - y)
             stop_r = 3.0
             mode = self.fight_mode
-        elif DROPS and self.nav is not None and t - self.threat_t > 3.0 and self._drop(obs, me, t):
+        elif DROPS and self.nav is not None and (t - self.threat_t > 3.0 or (
+                DROP_WAIT_CALM and self.drop_target is not None and t - self.last_dmg_t > 3.0)) and \
+                self._drop(obs, me, t):
+            # (already going for a drop: enemies in sight don't stop it, only being hit does)
             g, stop_r, mode = self._drop_now
             self.set_goal(g, x, y)
             dgoal = math.hypot(g[0] - x, g[1] - y)
@@ -496,6 +500,8 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
                 fire = self.fire(me, h, aim, size, is_mech, late, gun_ok)
                 if self.late_zone and is_mech and not self.late_fire_ok(me, m, h, t):
                     fire = [False, False]  # late: keep regenerating, don't start fights we can't end fast
+                if mode == "DROPWATCH" and is_mech and t - self.attackers.get(m["id"], -1e9) > 3.0:
+                    fire = [False, False]  # waiting out a fight at a drop: don't join it unless shot at
                 act["fire"] = fire
                 if LEARN_AIM and is_mech and speed and any(f and w and w["kind"] == "gun" for f, w in zip(fire, weapons)):
                     self.aim.record(t, m, tt)
