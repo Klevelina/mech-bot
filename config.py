@@ -88,6 +88,19 @@ FINISH_RUSH = True
 FINISH_RUSH_HP = 0.35
 FINISH_RUSH_MIN = 0.45
 FINISH_RUSH_R = {"gun": 18.0, "lightning": 22.0, "laser": 35.0}  # laser is hitscan: no need to be on top of it
+# squad: all in - our cautious rules off (heal-to-full, vanish, laser hide, fleeing unhittable attackers, odds
+# disengage, low-HP hiding, late-zone hold fire), one short retreat rule instead: back off (to cover close by) only when
+# 2+ enemies are in sight within ALLIN_NEAR_R and our HP is below ALLIN_TWO_HP, 3+ and below ALLIN_THREE_HP, or ours is
+# below ALLIN_LOW_HP while the target has clearly more - never while the target is nearly dead; back in ALLIN_BACK_S
+# after none of that holds any more
+SQUAD_ALL_IN = True
+ALLIN_NEAR_R = 160.0
+ALLIN_TWO_HP = 0.55
+ALLIN_THREE_HP = 0.8
+ALLIN_LOW_HP = 0.35      # ... with the target at least 10 points of HP fraction above us
+ALLIN_TARGET_LOW = 0.25  # never retreat from a target below this (and us above 20%, at most 2 near)
+ALLIN_BACK_S = 1.5
+ALLIN_COVER_R = 45.0     # retreat to a spot within this far that the enemies in sight can't see (else straight away)
 KILL_PILE = True       # (any match) our kill drops its cubes (+2) and weapons where it died: loot target right away
 
 DROP_WAIT_CALM = True  # FREE-FOR-ALL ONLY (vs the squad, 2+ enemies at a drop are hunters coming for us, not a fight):

@@ -165,6 +165,7 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         self.aim.observe(t, obs["mechs"])
         self.style = self.loadout_style(weapons)
         self.read_situation(obs, t)
+        self.all_in = SQUAD_ALL_IN and self.situation == "squad"
         if KILL_PILE:
             for e in obs["events"]:
                 if e["type"] == "kill" and e.get("target") in self.epos:
@@ -211,12 +212,18 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
                                 "late": (PHASE_LATE_HEAL, 1.0)}[self.phase]
         if SQUAD_HEAL and self.situation == "squad":
             heal_lo, heal_hi = SQUAD_HEAL[self.phase]  # full HP before the next hunter comes
+        if self.all_in:
+            heal_lo, heal_hi = None, None  # all in: no stopping to heal (the short retreat rule covers danger)
+            self.recovering = False
         if heal_lo is not None and not self.recovering and hp_frac < heal_lo and t - self.threat_t > 3.0:
             self.recovering = True
         elif self.recovering and (heal_hi is None or hp_frac >= heal_hi):
             self.recovering = False
         self.late_zone = LATE_GAME and zone["next_radius"] <= LATE_RADIUS
-        self.update_escape(me, mechs, t, t_start)
+        if self.all_in:
+            self.escape = None  # all in: no running from lasers / attackers we can't hit - pursue them instead
+        else:
+            self.update_escape(me, mechs, t, t_start)
 
         # ---- cover goal for the current circle
         key = (round(zone["next_center"][0], 1), round(zone["next_center"][1], 1), round(zone["next_radius"], 1))
@@ -280,7 +287,7 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             self.fight_goal = None
             self.fight_goal_id = None
         # surrounded: vanish (break every line of sight, go silent, heal, see whether they lose us)
-        vanish_goal = self.update_vanish(me, obs["mechs"], fight_m, t, t_start) if self.escape is None else None
+        vanish_goal = self.update_vanish(me, obs["mechs"], fight_m, t, t_start) if (self.escape is None and not self.all_in) else None
         hidden = vanish_goal is not None and self.vanish_hidden()
         safe = t - self.threat_t > SAFE_AFTER
         if self.escape is not None:
@@ -533,7 +540,7 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
                     # long shot: only if it can't stray further than ~1.5 body radii during the flight
                     gun_ok = self.aim.surprise(m["id"], tt) < 2.5 * scale * 1.5
                 fire = self.fire(me, h, aim, size, is_mech, late, gun_ok)
-                if self.late_zone and is_mech and not self.late_fire_ok(me, m, h, t):
+                if self.late_zone and is_mech and not self.all_in and not self.late_fire_ok(me, m, h, t):
                     fire = [False, False]  # late: keep regenerating, don't start fights we can't end fast
                 if mode == "DROPWATCH" and is_mech and t - self.attackers.get(m["id"], -1e9) > 3.0:
                     fire = [False, False]  # waiting out a fight at a drop: don't join it unless shot at
