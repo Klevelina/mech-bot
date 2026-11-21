@@ -107,6 +107,8 @@ UPGRADE_BY_LOADOUT = True  # upgrade order depends on what we carry (loot.UPGRAD
 # ---- early picks, then hide and heal: hunt weaker enemies only in the early phase, never after; heal more mid game
 EARLY_AGGRO = True
 AGGRO_HP = 0.5         # early: hunt while our HP is above this (instead of HUNT_HP)
+HUNT_LONE = True       # hunt in every phase (not only early, not only weaker targets): a lone enemy, nobody else
+                       # seen/heard within AGGRO_CLEAR_R in 10 s, our HP above AGGRO_HP, fight odds >= FIGHT_WIN_R
 AGGRO_CLEAR_R = 80.0   # early: hunt only if no other enemy was seen/heard this close to us in 10 s (normally 150 m)
 AGGRO_WEAKER = 0.9     # "weaker" target: its HP at most this x ours, or its back is turned to us
 AGGRO_FINISH_HP = 0.4  # early: chase a fleeing enemy below this HP fraction (normally FINISH_HP)

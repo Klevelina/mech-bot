@@ -457,7 +457,11 @@ class FightMixin:
 
         # pick the fight: a lone enemy, nobody else on us, we're healthy -> close to our weapon's range
         aggro = EARLY_AGGRO and getattr(self, "phase", "") == "early"
-        if EARLY_AGGRO:
+        if HUNT_LONE:
+            # any phase: a lone enemy (nobody else seen/heard within AGGRO_CLEAR_R) we beat on the odds -> go get it
+            aggro = True
+            hunt_ok = hp_frac > AGGRO_HP
+        elif EARLY_AGGRO:
             # early: pick off weaker enemies; after that, never go looking for fights (hide and heal instead)
             hunt_ok = aggro and hp_frac > AGGRO_HP and self.weaker(me, m)
         else:
