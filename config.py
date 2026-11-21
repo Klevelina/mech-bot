@@ -108,6 +108,9 @@ LASER_KILLSHOT_MARGIN = 0.85
 FIGHT_CUBES = True
 FIGHT_CUBES_R = 55.0     # this close
 FIGHT_CUBES_HURT = 0.5   # x this below half HP
+# squad all in: a laser we'd take is worth a long walk (gun + laser is the leaderboard loadout), any phase
+LASER_SEEK = True
+LASER_SEEK_R = 240.0
 KILL_PILE = True       # (any match) our kill drops its cubes (+2) and weapons where it died: loot target right away
 
 DROP_WAIT_CALM = True  # FREE-FOR-ALL ONLY (vs the squad, 2+ enemies at a drop are hunters coming for us, not a fight):

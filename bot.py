@@ -255,7 +255,8 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
                 if self.recovering:
                     md, skip = min(md, RECOVER_LOOT_DIST), ("crate", "npc")
                 tid, _ = self.mem.best_target(me, zone, weapons, late, md, lambda ix, iy: self.danger(ix, iy, t), skip,
-                                              phase=self.phase)
+                                              phase=self.phase,
+                                              laser_seek=LASER_SEEK_R if (LASER_SEEK and self.all_in) else 0.0)
                 if tid != self.target:
                     self.target, self.target_since = tid, t
             if self.target is not None:
