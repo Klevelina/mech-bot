@@ -224,7 +224,11 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
 
         # ---- loot target
         target = None
-        if LOOT and self.escape is None and t - self.threat_t > SAFE_AFTER:
+        # squad, early phase: only one hunter is out - the safest window to collect cubes, so get back to it sooner
+        early_farm = EARLY_FARM and self.situation == "squad" and self.phase == "early"
+        safe_after, dr, ds = (EARLY_FARM_SAFE, EARLY_FARM_DANGER_R, EARLY_FARM_DANGER_S) if early_farm else \
+            (SAFE_AFTER, DANGER_R, DANGER_S)
+        if LOOT and self.escape is None and t - self.threat_t > safe_after:
             if self.target is not None and (self.target not in self.mem.items or t - self.target_since > LOOT_GIVEUP_S):
                 if self.target in self.mem.items:
                     self.mem.banned.add(self.target)  # took too long
@@ -245,7 +249,7 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
                 skip = ()
                 if self.recovering:
                     md, skip = min(md, RECOVER_LOOT_DIST), ("crate", "npc")
-                tid, _ = self.mem.best_target(me, zone, weapons, late, md, lambda ix, iy: self.danger(ix, iy, t), skip,
+                tid, _ = self.mem.best_target(me, zone, weapons, late, md, lambda ix, iy: self.danger(ix, iy, t, dr, ds), skip,
                                               phase=self.phase)
                 if tid != self.target:
                     self.target, self.target_since = tid, t
