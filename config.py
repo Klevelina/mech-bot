@@ -106,7 +106,7 @@ UPGRADE_BY_LOADOUT = True  # upgrade order depends on what we carry (loot.UPGRAD
 
 # ---- commitment: fewer changes of mind
 LOOT_STICKY = 1.3      # the loot item we're already walking to scores this much higher (0 / 1 = off)
-FIGHT_HOLD = True      # in a fight with nothing better to do: hold our ground instead of walking back to cover
+FIGHT_HOLD = False     # (2.63 with it on) in a fight with nothing better to do: hold our ground instead of walking back to cover
 FIGHT_HOLD_COVER_R = 20.0  # ... unless the cover spot is this close (a near corner is still better)
 FIGHT_FAST_S = 0.3     # refresh fight positioning this often (not 1 s) while the target closes on us or is too close
 FIGHT_CLOSING_V = 3.0  # m/s toward us that counts as "closing"
