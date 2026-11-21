@@ -157,6 +157,16 @@ GEAR_LASER_R = 170.0
 GEAR_CLOSE_R = 55.0
 GEAR_WEAPON_R = 400.0
 GEAR_LASER_SEEK_R = 300.0
+# squad all in: gear sweeps (scan.py) - calm: full torso turn every SCAN_EVERY_NOLASER s without a laser (SCAN_EVERY
+# with one); first sweep / no laser yet and energy >= SCAN_JET_E: jump and jet up during it (down to SCAN_JET_STOP)
+SCAN = True
+SCAN_EVERY_NOLASER = 6.0
+SCAN_EVERY = 15.0
+SCAN_JET_E = 90.0
+SCAN_JET_STOP = 35.0
+SCAN_MECH_R = 150.0      # calm = no enemy that matters this close (harmless ones don't count while gearing) ...
+SCAN_ANY_R = 50.0        # ... and no enemy at all this close
+SCAN_MODES = ("cube", "pickup", "crate", "npc", "pile", "cover", "explore")
 KILL_PILE = True       # (any match) our kill drops its cubes (+2) and weapons where it died: loot target right away
 
 DROP_WAIT_CALM = True  # FREE-FOR-ALL ONLY (vs the squad, 2+ enemies at a drop are hunters coming for us, not a fight):
