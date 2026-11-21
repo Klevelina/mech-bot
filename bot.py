@@ -1,5 +1,6 @@
 """Mech bot: loot early (cubes, crates, drones, weapons), then hold cover inside the next zone circle.
-Shoots the nearest visible mech (unchanged from the example, apart from using the right weapon)."""
+Fights back: faces attackers, leads shots, picks targets (attacker > low HP > back turned), and
+escapes out of sight of attackers it can't hit (roof snipers, enemies behind walls)."""
 import math
 import time
 import traceback
@@ -20,6 +21,11 @@ DANGER_S = 25.0        # ... "recently"
 ENERGY_RESERVE = 25.0  # lightning won't spend below this (kept for boost/jet escapes)
 ENERGY_RESERVE_LATE = 9.0  # late game: spend almost all of it
 SWEEP = True           # sweep the torso while walking to spot more loot
+FACE_ATTACKER = True   # turn toward where damage comes from when we can't see the shooter
+LEAD = True            # lead gun shots at mechs
+SMART_TARGET = True    # attacker > low HP > back turned > close; else nearest
+ESCAPE_UNHITTABLE = True  # break line of sight from attackers we can't hit back
+NO_HIT_S = 2.5         # ... "can't hit" also means: shooting it this long with no hit landing
 SLICE_S = 0.020        # A* time per decision
 
 
@@ -28,12 +34,13 @@ def wrap(a):
 
 
 class Bot:
-    name = "mech-loot"
+    name = "mech-fight"
 
     def __init__(self, hello: mf.Hello):
         cfg = hello["config"]
         self.cfg = cfg
         self.reach = cfg["loot"]["pickup_radius"]
+        self.size_per_cube = cfg["cubes"].get("size_per_cube", 0.05)
         try:
             self.nav = Nav(hello["map"]["dir"], cfg["mech"])
         except Exception:
@@ -51,7 +58,16 @@ class Bot:
         self.stuck_n = 0
         self.bad = set()        # cover cells that failed
         self.threat_t = -1e9    # last time an enemy mech was seen / hit us
-        self.enemies = {}       # id -> (t, x, y)
+        self.enemies = {}       # id -> (t, x, y)       (for loot danger)
+        self.epos = {}          # id -> (t, pos, vel)   last known 3D state
+        self.attackers = {}     # id -> last time it damaged us
+        self.att_bearing = {}   # id -> bearing of its latest hit on us
+        self.dmg_bearing = (-1e9, 0.0)  # (t, bearing) of the latest mech damage
+        self.hits = {}          # id -> last time we hit it
+        self.fire_since = {}    # id -> when we started shooting at it
+        self.cur = None         # current fight target id
+        self.escape = None      # dict(src=id, goal=(x, y), t=start) while breaking line of sight
+        self.escape_check_t = -1e9
         self.target = None      # loot item id
         self.target_since = 0.0
         self.retarget_t = -1e9
@@ -139,6 +155,93 @@ class Bot:
                     and (err < tol * 3 or charge > 0)
         return out
 
+    def hit_zoff(self, me, m):
+        """Height above the mech's feet we have a clear line of fire to (center, then upper body), or None."""
+        scale = 1.0 + self.size_per_cube * m.get("cubes", 0)
+        if self.nav is None:
+            return 4.5 * scale
+        x, y, z = me["pos"]
+        mz = z + me["stats"].get("muzzle_height", 7)
+        p = m["pos"]
+        for zoff in (4.5 * scale, 7.5 * scale):
+            if self.nav.los(x, y, mz, p[0], p[1], p[2] + zoff):
+                return zoff
+        return None
+
+    def can_hit(self, me, m):
+        return self.hit_zoff(me, m) is not None
+
+    def pick_target(self, me, mechs, t):
+        x, y = me["pos"][0], me["pos"][1]
+        if not SMART_TARGET:
+            return min(mechs, key=lambda m: math.dist(m["pos"], me["pos"]))
+        best, bs = None, -1e18
+        for m in mechs:
+            mx, my = m["pos"][0], m["pos"][1]
+            d = math.hypot(mx - x, my - y)
+            s = -d / 10.0
+            if t - self.attackers.get(m["id"], -1e9) < 4.0:
+                s += 100.0
+            if m.get("hp") is not None and m.get("max_hp"):
+                s += 40.0 * (1.0 - m["hp"] / m["max_hp"])
+            # their back to us: we're outside their front arc
+            if abs(wrap(math.atan2(y - my, x - mx) - m["aim"][0])) > math.pi / 2:
+                s += 15.0
+            if m["id"] == self.cur:
+                s += 10.0
+            if not self.can_hit(me, m):
+                s -= 60.0
+            if s > bs:
+                best, bs = m, s
+        return best
+
+    # ---------- escape from attackers we can't hit
+    def update_escape(self, me, mechs, t, t_start):
+        if not ESCAPE_UNHITTABLE or self.nav is None:
+            self.escape = None
+            return
+        x, y, z = me["pos"]
+        if self.escape is not None:
+            src = self.escape["src"]
+            if t - self.attackers.get(src, -1e9) > 4.0 or t - self.escape["t"] > 20.0:
+                self.escape = None  # it stopped hurting us (or we gave it long enough)
+            return
+        if t - self.escape_check_t < 0.5:
+            return
+        self.escape_check_t = t
+        vis = {m["id"]: m for m in mechs}
+        for aid, at in self.attackers.items():
+            if t - at > 1.0 or aid >= 100:
+                continue
+            m = vis.get(aid)
+            unhittable = False
+            if m is not None:
+                if not self.can_hit(me, m):
+                    unhittable = True
+                elif t - self.fire_since.get(aid, t) > NO_HIT_S and t - self.hits.get(aid, -1e9) > NO_HIT_S:
+                    unhittable = True  # shooting for a while and nothing lands
+                src = m["pos"]
+            else:
+                st = self.epos.get(aid)
+                unhittable = True  # hurting us from out of sight
+                if st is not None and t - st[0] < 10:
+                    src = st[1]
+                else:
+                    b = self.att_bearing.get(aid, self.dmg_bearing[1])
+                    src =[x + 80 * math.cos(b), y + 80 * math.sin(b), z + 10]
+            if not unhittable:
+                continue
+            eye = src[2] + 8.0
+            c = self.nav.hide_cell(src[0], src[1], eye, x, y, 50.0, t_start + 0.015)
+            if c >= 0:
+                goal = self.nav.center(c)
+            else:  # nothing hides us close by: run directly away
+                a = math.atan2(y - src[1], x - src[0])
+                goal = self.nav.center(self.nav.nearest_main(x + 40 * math.cos(a), y + 40 * math.sin(a)))
+            self.escape = {"src": aid, "goal": goal, "t": t, "from": list(src)}
+            mf.log(f"t={t:.1f} escape from {aid} at {src[0]:.0f},{src[1]:.0f},{src[2]:.0f} -> {goal[0]:.0f},{goal[1]:.0f}")
+            return
+
     # ---------- main
     def act(self, obs: mf.Observation) -> mf.Action:
         t_start = time.perf_counter()
@@ -156,13 +259,21 @@ class Bot:
         mechs = [m for m in obs["mechs"] if m["kind"] == "mech"]
         for m in mechs:
             self.enemies[m["id"]] = (t, m["pos"][0], m["pos"][1])
+            self.epos[m["id"]] = (t, m["pos"], m["vel"])
         if mechs:
             self.threat_t = t
         for e in obs["events"]:
             if e["type"] == "damaged" and e.get("by") is not None and e["by"] < 100:
                 self.threat_t = t
+                self.attackers[e["by"]] = t
+                if e.get("bearing") is not None:
+                    self.dmg_bearing = (t, e["bearing"])
+                    self.att_bearing[e["by"]] = e["bearing"]
+            elif e["type"] == "hit":
+                self.hits[e["target"]] = t
         fighting = t - self.threat_t < 3.0
         late = obs["alive"] <= 5 or zone["next_radius"] <= 70
+        self.update_escape(me, mechs, t, t_start)
 
         # ---- cover goal for the current circle
         key = (round(zone["next_center"][0], 1), round(zone["next_center"][1], 1), round(zone["next_radius"], 1))
@@ -172,7 +283,7 @@ class Bot:
 
         # ---- loot target
         target = None
-        if LOOT and t - self.threat_t > SAFE_AFTER:
+        if LOOT and self.escape is None and t - self.threat_t > SAFE_AFTER:
             if self.target is not None and (self.target not in self.mem.items or t - self.target_since > 40):
                 if self.target in self.mem.items:
                     self.mem.banned.add(self.target)  # took too long
@@ -191,7 +302,11 @@ class Bot:
         # ---- what to walk to / stop near
         stop_r = 4.0
         shoot = None  # (pos, vel, zoff, size) of a crate/drone to shoot
-        if target is not None:
+        if self.escape is not None:
+            self.set_goal(self.escape["goal"], x, y)
+            dgoal = math.hypot(self.escape["goal"][0] - x, self.escape["goal"][1] - y)
+            stop_r = 1.5
+        elif target is not None:
             k = target["kind"]
             tpos = (target["x"], target["y"])
             dist_t = math.hypot(tpos[0] - x, tpos[1] - y)
@@ -229,7 +344,9 @@ class Bot:
             self.pidx = 0
             if not s.reached:
                 mf.log(f"t={t:.1f} goal unreachable, partial path {len(s.path)}")
-                if target is not None:
+                if self.escape is not None:
+                    pass  # partial path still moves us away
+                elif target is not None:
                     self.mem.banned.add(self.target)
                     self.target = None
                 else:
@@ -266,7 +383,7 @@ class Bot:
         # ---- stuck detection
         self.hist.append((t, x, y))
         jump = False
-        boost = not me["in_zone"]
+        boost = not me["in_zone"] or (self.escape is not None and me["energy"] > 30)
         if self.unstick > 0:
             self.unstick -= 1
             boost = True
@@ -297,7 +414,12 @@ class Bot:
             yaw = math.atan2(zone["center"][1] - y, zone["center"][0] - x)
             if SWEEP and not fighting:
                 yaw += 1.0 * math.sin(t * 0.5)
-        act.update(move=move, boost=boost, jump=jump, aim=[yaw, 0.0])
+        pitch = 0.0
+        # hit by someone we can't see: face them (front armor) and look for them
+        if FACE_ATTACKER and not mechs and t - self.dmg_bearing[0] < 3.0:
+            yaw = self.dmg_bearing[1]
+            pitch = 0.15  # roofs / jets are above us more often than below
+        act.update(move=move, boost=boost, jump=jump, aim=[yaw, pitch])
 
         # ---- take weapons in reach (swap rules in loot.weapon_take)
         for p in obs["pickups"]:
@@ -316,13 +438,28 @@ class Bot:
             act["aim"] = aim
             act["fire"] = self.fire(me, h, aim, shoot[3], False)
 
-        # ---- fight: nearest visible mech (aim as in the example)
+        # ---- fight
         if mechs:
-            e = min(mechs, key=lambda m: math.dist(m["pos"], me["pos"]))["pos"]
-            aim = [math.atan2(e[1] - y, e[0] - x), math.atan2(e[2] - z - 2.5, math.dist(e[:2], (x, y)))]
+            m = self.pick_target(me, mechs, t)
+            if m["id"] != self.cur:
+                self.cur = m["id"]
+            for i in list(self.fire_since):
+                if i != m["id"]:
+                    del self.fire_since[i]
+            self.fire_since.setdefault(m["id"], t)
+            scale = 1.0 + self.size_per_cube * m.get("cubes", 0)
+            laser_charging = any(w and w["kind"] == "laser" and w.get("charge", 0) > 0 for w in weapons)
+            speed = 0.0 if (laser_charging or not LEAD) else self._gun_speed(me)  # laser is hitscan
+            zoff = self.hit_zoff(me, m)
+            aim, h = self.aim_at(me, m["pos"], m["vel"], zoff if zoff is not None else 4.5 * scale, speed)
             act["aim"] = aim
-            act["fire"] = self.fire(me, math.dist(e[:2], (x, y)), aim, 2.5, True, late)
+            if zoff is not None:
+                act["fire"] = self.fire(me, h, aim, 2.5 * scale, True, late)
+            e = m["pos"]
             mf.draw.line([x, y, z + 7], [e[0], e[1], e[2] + 4.5], "#ff5040")
+        else:
+            self.cur = None
+            self.fire_since.clear()
 
         # ---- reload when calm
         g = weapons[0] if weapons[0] and weapons[0]["kind"] == "gun" else None
@@ -337,8 +474,9 @@ class Bot:
         mf.draw.point([gx, gy, z + 1], "#40c0ff", 8)
         for it in list(self.mem.items.values())[:20]:
             mf.draw.point([it["x"], it["y"], it["z"] + 1], "#ffd060", 4)
-        what = f"{target['kind']}" if target else "cover"
+        what = "ESCAPE" if self.escape else (f"{target['kind']}" if target else "cover")
         mf.draw.label(f"hp {me['hp']:.0f} {what} d{dgoal:.0f} cubes {me['cubes']:.0f}"
+                      f"{' tgt %d' % self.cur if self.cur is not None else ''}"
                       f"{' S' if self.unstick else ''}{' P' if self.search else ''}")
         return act
 
