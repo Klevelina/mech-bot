@@ -79,7 +79,10 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         self.finish_m = None
         self.finish_now = None
         self.want_reload = False  # set by hunting: reload before going in
-        self.recovering = False   # healing up after a fight (see RECOVER)
+        self.recovering = False   # healing up after a fight (see RECOVER / PHASES)
+        self.phase = "early"
+        self.open_here = 0        # open directions (of 12) at our current spot, refreshed now and then
+        self.open_t = -1e9
         self.mortar_commit = (-1e9, None)  # (until t, target id): keep the torso on the mortar solution
         self.spawn_yaw = None
         self.snd_i = 0
@@ -112,7 +115,7 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         weapons = me["weapons"]
         act: mf.Action = {"tick": obs["tick"]}
         if obs["offer"]:
-            act["pick"] = pick_upgrade(obs["offer"])
+            act["pick"] = pick_upgrade(obs["offer"], me["weapons"])
 
         # ---- world model
         self.mem.update(obs)
@@ -165,11 +168,24 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         # recovery: after a fight, below RECOVER_HP -> no shooting things (it resets the 5 s regen timer),
         # no exploring/hunting; pick up only what needs no shooting, close by; hold cover until healed
         hp_frac = me["hp"] / max(1.0, me["max_hp"])
-        if RECOVER and not self.recovering and hp_frac < RECOVER_HP and t - self.threat_t > 3.0:
-            self.recovering = True
-        elif self.recovering and hp_frac >= RECOVER_UNTIL:
-            self.recovering = False
         late = obs["alive"] <= 5 or zone["next_radius"] <= 70
+        # game phase: loot hard early (cubes/weapons win later fights), conserve HP late (it decides the end)
+        if late:
+            self.phase = "late"
+        elif obs["alive"] >= PHASE_EARLY_ALIVE and zone["next_radius"] >= PHASE_EARLY_RADIUS:
+            self.phase = "early"
+        else:
+            self.phase = "mid"
+        heal_lo, heal_hi = (RECOVER_HP, RECOVER_UNTIL) if RECOVER else (None, None)
+        if PHASES:
+            group_weapon = any(w and w["kind"] in ("lightning", "mortar") for w in weapons)
+            heal_lo, heal_hi = {"early": (None, None),
+                                "mid": ((PHASE_MID_HEAL, 0.9) if group_weapon else (None, None)),
+                                "late": (PHASE_LATE_HEAL, 1.0)}[self.phase]
+        if heal_lo is not None and not self.recovering and hp_frac < heal_lo and t - self.threat_t > 3.0:
+            self.recovering = True
+        elif self.recovering and (heal_hi is None or hp_frac >= heal_hi):
+            self.recovering = False
         self.late_zone = LATE_GAME and zone["next_radius"] <= LATE_RADIUS
         self.update_escape(me, mechs, t, t_start)
 
@@ -197,6 +213,8 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             if self.target is None or t - self.retarget_t > 1.0:
                 self.retarget_t = t
                 md = LOOT_MAX_DIST if t < LOOT_UNTIL else LOOT_LATE_DIST
+                if PHASES:
+                    md = {"early": LOOT_MAX_DIST, "mid": PHASE_MID_LOOT, "late": LOOT_LATE_DIST}[self.phase]
                 skip = ()
                 if self.recovering:
                     md, skip = min(md, RECOVER_LOOT_DIST), ("crate", "npc")
@@ -379,6 +397,13 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             yaw = self.cover_face  # parked in a corner: watch the open side, that's where they come from
             if SWEEP and not fighting:
                 yaw += 0.7 * math.sin(t * 0.5)
+                # standing in the open with enemies around: they can come from anywhere -> watch wider
+                if OPEN_WATCH and self.nav is not None:
+                    if t - self.open_t > 2.0:
+                        self.open_t = t
+                        self.open_here = self.nav.exposure(self.nav.cell_of(x, y))[0]
+                    if self.open_here >= 8 and self.danger(x, y, t, 150.0, 15.0):
+                        yaw = self.cover_face + 2.0 * math.sin(t * 0.8)
         else:
             yaw = math.atan2(zone["center"][1] - y, zone["center"][0] - x)
             if SWEEP and not fighting:
@@ -436,7 +461,11 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             speed = 0.0 if (laser_charging or not LEAD or not has_gun) else self._gun_speed(me)
             zoff = self.hit_zoff(me, m)
             k = self.aim.lead(m["id"]) if (LEARN_AIM and is_mech) else 1.0
-            aim, h = self.aim_at(me, m["pos"], m["vel"], zoff if zoff is not None else 4.5 * scale, speed, k)
+            tpos = m["pos"]
+            if LASER_LEAD_S and speed == 0.0 and laser_charging:
+                # hitscan, but it fires on our next decision: aim where it will be then
+                tpos = [m["pos"][0] + m["vel"][0] * LASER_LEAD_S, m["pos"][1] + m["vel"][1] * LASER_LEAD_S, m["pos"][2]]
+            aim, h = self.aim_at(me, tpos, m["vel"], zoff if zoff is not None else 4.5 * scale, speed, k)
             act["aim"] = aim
             no_shot = zoff is None  # target behind cover right now: a free moment to reload
             if zoff is not None:

@@ -1,7 +1,7 @@
 """Loot: remember items we have seen, pick what to go for, weapon swap rules, upgrade picks."""
 import math
 
-from config import LIGHTNING_FIRST, PLAYBOOK, DROP_GUN_FOR_PAIR, MORTAR_USE
+from config import LIGHTNING_FIRST, PLAYBOOK, DROP_GUN_FOR_PAIR, MORTAR_USE, UPGRADE_BY_LOADOUT
 
 # What a found item is worth before distance (rough "cubes" scale).
 VALUE = {"cube": 3.0, "crate": 2.5, "npc": 5.0, "pile": 6.0}  # a drone drops 2 cubes
@@ -15,9 +15,38 @@ UPGRADE_ORDER = (["plating", "lightning_chain", "armor", "lightning_range", "nan
 SPECIALS = ("laser", "lightning")
 
 
-def pick_upgrade(offer):
+# Upgrade order by what we carry (UPGRADE_BY_LOADOUT): survival first (plating, armor), then what makes OUR
+# weapons hit harder/sooner; the generic list is the fallback for anything not listed.
+UPGRADES_FOR = {
+    "gun": ["plating", "gun_damage", "armor", "gun_rate", "nanites", "gun_mag", "sensors", "gun_velocity"],
+    "laser": ["plating", "laser_charge", "armor", "laser_damage", "nanites", "sensors", "laser_pierce"],
+    "lightning": ["plating", "lightning_chain", "armor", "lightning_range", "nanites", "lightning_efficiency",
+                  "capacitor", "reactor"],
+    "hybrid": ["plating", "lightning_chain", "laser_charge", "armor", "lightning_range", "laser_damage", "nanites",
+               "lightning_efficiency"],
+    "mortar": ["plating", "armor", "mortar_reload", "nanites", "mortar_velocity", "mortar_splash", "gun_damage"],
+}
+
+
+def upgrade_order(weapons):
+    kinds = {w["kind"] for w in (weapons or []) if w}
+    if "laser" in kinds and "lightning" in kinds:
+        key = "hybrid"
+    elif "lightning" in kinds:
+        key = "lightning"
+    elif "laser" in kinds:
+        key = "laser"
+    elif "mortar" in kinds:
+        key = "mortar"
+    else:
+        key = "gun"
+    return UPGRADES_FOR[key] + UPGRADE_ORDER
+
+
+def pick_upgrade(offer, weapons=None):
     ids = [c["id"] for c in offer["choices"]]
-    for want in UPGRADE_ORDER:
+    order = upgrade_order(weapons) if (UPGRADE_BY_LOADOUT and weapons is not None) else UPGRADE_ORDER
+    for want in order:
         if want in ids:
             return ids.index(want)
     return 0

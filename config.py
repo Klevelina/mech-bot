@@ -85,7 +85,21 @@ PILE_FINISH = True     # an enemy within 30 m of a known death pile below PILE_F
 PILE_FINISH_HP = 0.45
 
 # ---- recovery after fights
-RECOVER = True         # below RECOVER_HP with no fight for 3 s: heal up before looting far / exploring / hunting
+RECOVER = False        # below RECOVER_HP with no fight for 3 s: heal up before looting far / exploring / hunting
 RECOVER_HP = 0.7
 RECOVER_UNTIL = 0.95
 RECOVER_LOOT_DIST = 60.0  # while healing: only cubes / weapons / piles this close (no crates or drones: shooting resets regen)
+
+# ---- game phases (replaces RECOVER): loot hard early, heal only with a group weapon mid, conserve HP late
+PHASES = True
+PHASE_EARLY_ALIVE = 11  # early: at least this many alive ...
+PHASE_EARLY_RADIUS = 140.0  # ... and the next circle at least this big (late = <= 5 alive or circle <= 70)
+PHASE_MID_LOOT = 80.0  # mid: loot this far (early LOOT_MAX_DIST, late LOOT_LATE_DIST)
+PHASE_MID_HEAL = 0.5   # mid, only holding lightning or mortar: heal at a corner below this (up to 90%)
+PHASE_LATE_HEAL = 0.9  # late: heal whenever below this (HP decides the final collapse)
+
+# ---- aim per weapon / watching
+LASER_LEAD_S = 0.1     # laser fires on our next decision: aim where the target will be then
+LIGHTNING_CLUSTER = True  # with lightning: prefer targets with other enemies within chain range
+OPEN_WATCH = True      # parked in the open (8+ of 12 directions) with enemies around: sweep the torso wider
+UPGRADE_BY_LOADOUT = True  # upgrade order depends on what we carry (loot.UPGRADES_FOR)
