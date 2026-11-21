@@ -9,6 +9,7 @@ from collections import deque
 import mechfight as mf
 from nav import Nav, Search
 from loot import Memory, pick_upgrade, weapon_take
+from aim import AimLearner
 
 # ---- switches (flip to compare submissions)
 LOOT = True            # go for items at all
@@ -26,6 +27,13 @@ LEAD = True            # lead gun shots at mechs
 SMART_TARGET = True    # attacker > low HP > back turned > close; else nearest
 ESCAPE_UNHITTABLE = True  # break line of sight from attackers we can't hit back
 NO_HIT_S = 2.5         # ... "can't hit" also means: shooting it this long with no hit landing
+LEARN_AIM = True       # learn per-enemy lead factor from where targets really went
+HOLD_DODGY = True      # don't spend gun ammo on long shots at targets that change direction a lot
+PLAYSTYLE = True       # move by loadout: gun keeps mid range, laser keeps long range, lightning ambushes
+DRONE_FARM = True      # shoot back at drones that shoot us, treat them as loot
+EXPLORE = True         # early, with nothing to loot: walk to unexplored areas to find loot
+EXPLORE_UNTIL = 100.0  # match time
+EXPLORE_BIN = 25.0     # m, size of the "have we looked here" bins
 SLICE_S = 0.020        # A* time per decision
 
 
@@ -71,6 +79,15 @@ class Bot:
         self.target = None      # loot item id
         self.target_since = 0.0
         self.retarget_t = -1e9
+        self.aim = AimLearner()
+        self.fight_goal = None  # (x, y) where the playstyle wants us during a fight
+        self.fight_goal_t = -1e9
+        self.fight_goal_id = None
+        self.style = "gun"
+        self.seen_bins = set()  # explored (bx, by) bins
+        self.explore_goal = None
+        self.explore_t = -1e9
+        self.npc_attackers = {}  # drone id -> last time it hit us
 
     # ---------- goal selection
     def choose_cover(self, mx, my, zone):
@@ -115,11 +132,14 @@ class Bot:
         return False
 
     # ---------- aiming / firing
-    def aim_at(self, me, pos, vel, zoff, speed):
+    def aim_at(self, me, pos, vel, zoff, speed, k=1.0):
+        """Aim to hit `pos` (+zoff) moving at `vel`, with a bullet of `speed` (0 = hitscan).
+        `k` scales the horizontal lead (learned). Returns ([yaw, pitch], horizontal distance)."""
         mx, my, mz = me["pos"]
         mz += me["stats"].get("muzzle_height", 7)
         px, py, pz = pos
         vx, vy, vz = vel if vel else (0.0, 0.0, 0.0)
+        vx, vy = vx * k, vy * k
         tt = 0.0
         for _ in range(3):
             ax, ay, az = px + vx * tt, py + vy * tt, pz + zoff + vz * tt
@@ -130,7 +150,7 @@ class Bot:
         pitch = max(st.get("min_pitch", -0.7), min(st.get("max_pitch", 1.3), math.atan2(az - mz, h)))
         return [math.atan2(ay - my, ax - mx), pitch], h
 
-    def fire(self, me, dist, aim, size, is_mech, late=False):
+    def fire(self, me, dist, aim, size, is_mech, late=False, gun_ok=True):
         """fire flags for both slots at a target `dist` away along commanded `aim`; size = target radius."""
         reserve = ENERGY_RESERVE_LATE if late else ENERGY_RESERVE
         cur = me["aim"]
@@ -142,7 +162,7 @@ class Bot:
                 continue
             k, st = w["kind"], w["stats"]
             if k == "gun":
-                out[i] = err < tol * 1.5 and dist < st.get("range", 230) and w.get("ammo", 1) > 0
+                out[i] = gun_ok and err < tol * 1.5 and dist < st.get("range", 230) and w.get("ammo", 1) > 0
             elif k == "lightning":
                 cone = math.radians(st.get("cone_deg", 30)) / 2
                 out[i] = dist < st.get("range", 45) * 0.95 and abs(wrap(cur[0] - aim[0])) < cone * 0.8 \
@@ -242,6 +262,114 @@ class Bot:
             mf.log(f"t={t:.1f} escape from {aid} at {src[0]:.0f},{src[1]:.0f},{src[2]:.0f} -> {goal[0]:.0f},{goal[1]:.0f}")
             return
 
+    # ---------- playstyle by loadout
+    @staticmethod
+    def loadout_style(weapons):
+        kinds = {w["kind"] for w in weapons if w}
+        if "lightning" in kinds:
+            return "lightning"
+        if "laser" in kinds:
+            return "laser"
+        return "gun"
+
+    def away_goal(self, me, ex, ey, dist, t_start):
+        """Somewhere ~dist m further from (ex, ey): a spot it can't see if one is close, else straight back."""
+        x, y, z = me["pos"]
+        nav = self.nav
+        c = nav.hide_cell(ex, ey, nav.ground_z(ex, ey) + 8.0, x, y, 30.0, t_start + 0.008)
+        if c >= 0:
+            cx, cy = nav.center(c)
+            if math.hypot(cx - ex, cy - ey) > math.hypot(x - ex, y - ey) - 5:  # not toward it
+                return (cx, cy)
+        a = math.atan2(y - ey, x - ex)
+        return nav.center(nav.nearest_main(x + dist * math.cos(a), y + dist * math.sin(a)))
+
+    def update_fight_goal(self, me, m, t, t_start):
+        """Where to stand against target m, by our loadout. None = keep the normal goal (cover)."""
+        if not PLAYSTYLE or self.nav is None or m is None:
+            self.fight_goal = None
+            return
+        if t - self.fight_goal_t < 1.0 and m["id"] == self.fight_goal_id:
+            return  # same target: refresh once a second; new target: right away
+        self.fight_goal_t = t
+        self.fight_goal_id = m["id"]
+        x, y = me["pos"][0], me["pos"][1]
+        ex, ey = m["pos"][0], m["pos"][1]
+        d = math.hypot(ex - x, ey - y)
+        theirs = set(m.get("weapons") or [])
+        hp_frac = me["hp"] / max(1.0, me["max_hp"])
+        goal = None
+        if self.style == "gun":
+            # gun: keep mid range (leading works, lightning can't reach us)
+            if d < 50 or ("lightning" in theirs and d < 65):
+                goal = self.away_goal(me, ex, ey, 30.0, t_start)
+        elif self.style == "laser":
+            # laser: keep long range; lightning shorts our laser, so stay well out of its reach
+            if d < 70 or ("lightning" in theirs and d < 90):
+                goal = self.away_goal(me, ex, ey, 35.0, t_start)
+        else:
+            # lightning: ambush. Hold position and let them come within arc range;
+            # close in on laser carriers (lightning shorts their laser) when healthy
+            if "laser" in theirs and d < 80 and hp_frac > 0.5:
+                goal = (ex, ey)
+            elif "mortar" in theirs and d < 30:
+                goal = self.away_goal(me, ex, ey, 25.0, t_start)  # mortar beats lightning up close
+        self.fight_goal = goal
+
+    # ---------- early exploration
+    def mark_seen(self, x, y):
+        b = EXPLORE_BIN
+        bx, by = int(x // b), int(y // b)
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                self.seen_bins.add((bx + dx, by + dy))
+
+    def choose_explore(self, x, y, zone):
+        nav = self.nav
+        b = EXPLORE_BIN
+        nc, nr = zone["next_center"], zone["next_radius"]
+        cc, cr = zone["center"], zone["radius"]
+        bx0, by0 = int(x // b), int(y // b)
+        R = int(150 // b)
+        best, bs = None, 1e18
+        for dx in range(-R, R + 1):
+            for dy in range(-R, R + 1):
+                key = (bx0 + dx, by0 + dy)
+                if key in self.seen_bins:
+                    continue
+                cx, cy = (key[0] + 0.5) * b, (key[1] + 0.5) * b
+                d = math.hypot(cx - x, cy - y)
+                if d < 40 or d > 150:
+                    continue
+                dn = math.hypot(cx - nc[0], cy - nc[1])
+                if dn > nr - 20 or math.hypot(cx - cc[0], cy - cc[1]) > cr - 20:
+                    continue
+                if self.danger(cx, cy, self._t):
+                    continue
+                s = d + 0.5 * dn
+                if s < bs:
+                    best, bs = key, s
+        if best is None:
+            return None
+        cx, cy = (best[0] + 0.5) * b, (best[1] + 0.5) * b
+        c = nav.nearest_main(cx, cy, max_r=6)
+        if nav.comp[c] != nav.main:
+            self.seen_bins.add(best)  # nothing walkable there
+            return None
+        return nav.center(c)
+
+    def _explore(self, x, y, zone, t):
+        """Keep/choose an exploration goal; False when there is nothing left worth exploring."""
+        g = self.explore_goal
+        if g is not None and math.hypot(g[0] - x, g[1] - y) < 8.0:
+            self.mark_seen(g[0], g[1])
+            g = None
+        if g is None or t - self.explore_t > 20.0:
+            self.explore_t = t
+            g = self.choose_explore(x, y, zone)
+        self.explore_goal = g
+        return g is not None
+
     # ---------- main
     def act(self, obs: mf.Observation) -> mf.Action:
         t_start = time.perf_counter()
@@ -271,6 +399,12 @@ class Bot:
                     self.att_bearing[e["by"]] = e["bearing"]
             elif e["type"] == "hit":
                 self.hits[e["target"]] = t
+            if e["type"] == "damaged" and e.get("by") is not None and e["by"] >= 100:
+                self.npc_attackers[e["by"]] = t
+        self._t = t
+        self.aim.observe(t, obs["mechs"])
+        self.style = self.loadout_style(weapons)
+        self.mark_seen(x, y)
         fighting = t - self.threat_t < 3.0
         late = obs["alive"] <= 5 or zone["next_radius"] <= 70
         self.update_escape(me, mechs, t, t_start)
@@ -288,6 +422,14 @@ class Bot:
                 if self.target in self.mem.items:
                     self.mem.banned.add(self.target)  # took too long
                 self.target = None
+            # a drone shooting at us: deal with it first (it's worth 2 cubes anyway)
+            if DRONE_FARM:
+                for nid, nt in self.npc_attackers.items():
+                    if t - nt < 3.0 and nid in self.mem.items and nid not in self.mem.banned:
+                        if self.target != nid:
+                            self.target, self.target_since = nid, t
+                        self.retarget_t = t
+                        break
             if self.target is None or t - self.retarget_t > 1.0:
                 self.retarget_t = t
                 md = LOOT_MAX_DIST if t < LOOT_UNTIL else LOOT_LATE_DIST
@@ -302,10 +444,30 @@ class Bot:
         # ---- what to walk to / stop near
         stop_r = 4.0
         shoot = None  # (pos, vel, zoff, size) of a crate/drone to shoot
+        fight_m = self.pick_target(me, mechs, t) if mechs else None
+        if fight_m is not None and self.escape is None:
+            self.update_fight_goal(me, fight_m, t, t_start)
+        elif not mechs:
+            self.fight_goal = None
+            self.fight_goal_id = None
+        safe = t - self.threat_t > SAFE_AFTER
         if self.escape is not None:
             self.set_goal(self.escape["goal"], x, y)
             dgoal = math.hypot(self.escape["goal"][0] - x, self.escape["goal"][1] - y)
             stop_r = 1.5
+            mode = "ESCAPE"
+        elif self.fight_goal is not None:
+            self.set_goal(self.fight_goal, x, y)
+            dgoal = math.hypot(self.fight_goal[0] - x, self.fight_goal[1] - y)
+            stop_r = 3.0
+            mode = "FIGHTMOVE"
+        elif target is None and EXPLORE and safe and t < EXPLORE_UNTIL and self.nav is not None and \
+                self._explore(x, y, zone, t):
+            gx, gy = self.explore_goal
+            self.set_goal(self.explore_goal, x, y)
+            dgoal = math.hypot(gx - x, gy - y)
+            stop_r = 6.0
+            mode = "explore"
         elif target is not None:
             k = target["kind"]
             tpos = (target["x"], target["y"])
@@ -332,9 +494,11 @@ class Bot:
                 gx, gy = tpos
             self.set_goal((gx, gy), x, y)
             dgoal = dist_t
+            mode = k
         else:
             self.set_goal(self.cover, x, y)
             dgoal = math.hypot(self.cover[0] - x, self.cover[1] - y)
+            mode = "cover"
 
         # ---- path search slice
         if self.search is not None and self.search.step(t_start + SLICE_S):
@@ -440,7 +604,7 @@ class Bot:
 
         # ---- fight
         if mechs:
-            m = self.pick_target(me, mechs, t)
+            m = fight_m
             if m["id"] != self.cur:
                 self.cur = m["id"]
             for i in list(self.fire_since):
@@ -451,10 +615,19 @@ class Bot:
             laser_charging = any(w and w["kind"] == "laser" and w.get("charge", 0) > 0 for w in weapons)
             speed = 0.0 if (laser_charging or not LEAD) else self._gun_speed(me)  # laser is hitscan
             zoff = self.hit_zoff(me, m)
-            aim, h = self.aim_at(me, m["pos"], m["vel"], zoff if zoff is not None else 4.5 * scale, speed)
+            k = self.aim.lead(m["id"]) if LEARN_AIM else 1.0
+            aim, h = self.aim_at(me, m["pos"], m["vel"], zoff if zoff is not None else 4.5 * scale, speed, k)
             act["aim"] = aim
             if zoff is not None:
-                act["fire"] = self.fire(me, h, aim, 2.5 * scale, True, late)
+                tt = h / speed if speed else 0.0
+                gun_ok = True
+                if HOLD_DODGY and speed and h > 60:
+                    # long shot: only if it can't stray further than ~1.5 body radii during the flight
+                    gun_ok = self.aim.surprise(m["id"], tt) < 2.5 * scale * 1.5
+                fire = self.fire(me, h, aim, 2.5 * scale, True, late, gun_ok)
+                act["fire"] = fire
+                if LEARN_AIM and speed and any(f and w and w["kind"] == "gun" for f, w in zip(fire, weapons)):
+                    self.aim.record(t, m, tt)
             e = m["pos"]
             mf.draw.line([x, y, z + 7], [e[0], e[1], e[2] + 4.5], "#ff5040")
         else:
@@ -474,7 +647,7 @@ class Bot:
         mf.draw.point([gx, gy, z + 1], "#40c0ff", 8)
         for it in list(self.mem.items.values())[:20]:
             mf.draw.point([it["x"], it["y"], it["z"] + 1], "#ffd060", 4)
-        what = "ESCAPE" if self.escape else (f"{target['kind']}" if target else "cover")
+        what = f"{mode} {self.style} k{self.aim.gk:.2f}"
         mf.draw.label(f"hp {me['hp']:.0f} {what} d{dgoal:.0f} cubes {me['cubes']:.0f}"
                       f"{' tgt %d' % self.cur if self.cur is not None else ''}"
                       f"{' S' if self.unstick else ''}{' P' if self.search else ''}")

@@ -2,7 +2,7 @@
 import math
 
 # What a found item is worth before distance (rough "cubes" scale).
-VALUE = {"cube": 3.0, "crate": 2.5, "npc": 4.0}
+VALUE = {"cube": 3.0, "crate": 2.5, "npc": 5.0}  # a drone drops 2 cubes
 # Upgrade picks, first available wins. Plating/armor/nanites keep us alive; the rest are fillers.
 UPGRADE_ORDER = ["plating", "armor", "nanites", "sensors",
                  "lightning_efficiency", "laser_charge", "laser_damage", "lightning_range",
@@ -81,7 +81,7 @@ class Memory:
             age = t - it["seen"]
             if age > 1.0 and (it["x"] - x) ** 2 + (it["y"] - y) ** 2 < 20.0 ** 2:
                 gone.append(i)
-            elif it["kind"] == "npc" and age > 15:
+            elif it["kind"] == "npc" and age > 60:  # drones stay within ~30-60 m of home
                 gone.append(i)
             elif age > 120:
                 gone.append(i)
