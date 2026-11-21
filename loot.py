@@ -1,7 +1,7 @@
 """Loot: remember items we have seen, pick what to go for, weapon swap rules, upgrade picks."""
 import math
 
-from config import LIGHTNING_FIRST, PLAYBOOK, DROP_GUN_FOR_PAIR, MORTAR_USE, UPGRADE_BY_LOADOUT, \
+from config import LASER_FIRST, LIGHTNING_FIRST, PLAYBOOK, DROP_GUN_FOR_PAIR, MORTAR_USE, UPGRADE_BY_LOADOUT, \
     POWER, POWER_WEAPON_V, POWER_DRONE_V, POWER_R, POWER_MORE, POWER_CRATE_V
 
 # What a found item is worth before distance (rough "cubes" scale).
@@ -83,6 +83,11 @@ def weapon_take(kind, weapons, late, fighting):
         return 0
     if PLAYBOOK and DROP_GUN_FOR_PAIR and s0 == "gun" and s1 in SPECIALS and kind != s1:
         return 0  # playbook target loadout: laser + lightning, the gun goes
+    if LASER_FIRST:
+        # gun + laser: swap a lightning for a laser, keep the gun all game
+        if kind == "laser" and "lightning" in (s0, s1):
+            return 0 if s0 == "lightning" else 1
+        return None
     pref = "lightning" if (late or LIGHTNING_FIRST) else "laser"  # lightning chains through groups
     if late and s0 == "gun":
         return 0  # gun out, second special in
@@ -176,6 +181,8 @@ class Memory:
                 v = 5.0 if d == "empty" else 3.0
                 if it["wkind"] == "mortar":
                     v = 3.0
+                if LASER_FIRST and it["wkind"] == "laser":
+                    v += 2.0
                 if LIGHTNING_FIRST and it["wkind"] == "lightning":
                     v += 2.0
                 if PLAYBOOK:
