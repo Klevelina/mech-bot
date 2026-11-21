@@ -208,6 +208,29 @@ class FightMixin:
                 best, bs = m, s
         return best
 
+    def allin_retreat(self, me, m, t, t_start, hp_frac):
+        """SQUAD_ALL_IN: the one retreat rule. (x, y) to back off to, or None to keep fighting."""
+        x, y = me["pos"][0], me["pos"][1]
+        in_sight = [o for o in self._obs_mechs if o["kind"] == "mech" and
+                    math.hypot(o["pos"][0] - x, o["pos"][1] - y) < ALLIN_NEAR_R]
+        n = len(in_sight)
+        bad = (n >= 2 and hp_frac < ALLIN_TWO_HP) or (n >= 3 and hp_frac < ALLIN_THREE_HP)
+        tf = (m.get("hp") or 1400.0) / max(1.0, m.get("max_hp") or 1400.0)
+        if hp_frac < ALLIN_LOW_HP and tf > hp_frac + 0.1:
+            bad = True
+        if tf < ALLIN_TARGET_LOW and hp_frac > 0.2 and n <= 2:
+            bad = False  # it's nearly dead: finish it
+        if bad:
+            self.allin_bad_t = t
+        if t - getattr(self, "allin_bad_t", -1e9) >= ALLIN_BACK_S:
+            return None
+        eyes = [(o["pos"][0], o["pos"][1], o["pos"][2] + 8.0) for o in in_sight] or \
+            [(m["pos"][0], m["pos"][1], m["pos"][2] + 8.0)]
+        c = self.nav.flank_cell(eyes, None, x, y, ALLIN_COVER_R, t_start + 0.010)
+        if c >= 0:
+            return self.nav.center(c)
+        return self.away_goal(me, m["pos"][0], m["pos"][1], 30.0, t_start)
+
     def engage_goal(self, me, m, t, d, theirs):
         """ENGAGE (squad): ((x, y), mode) to go at enemy m, or None to leave the position to the other rules.
         In our line of fire and further than our range: close in. Out of our line of fire: pursue it."""
@@ -558,6 +581,13 @@ class FightMixin:
         hp_frac = me["hp"] / max(1.0, me["max_hp"])
         goal = None
 
+        all_in = getattr(self, "all_in", False)
+        if all_in and m["kind"] == "mech":
+            g = self.allin_retreat(me, m, t, t_start, hp_frac)
+            if g is not None:
+                self.fight_goal, self.fight_mode = g, "RETREAT"
+                return
+
         if FIELD:
             g = self.choose_field(me, t, t_start, self._obs_mechs)
             if g is not None:
@@ -616,7 +646,7 @@ class FightMixin:
                 self.fight_goal, self.fight_mode = self.nav.center(self.nav.nearest_main(px, py)), "HUNT"
                 return
 
-        if FIGHT_ODDS and m["kind"] == "mech" and t - self.last_dmg_t < 3.0:
+        if FIGHT_ODDS and not all_in and m["kind"] == "mech" and t - self.last_dmg_t < 3.0:
             # being shot and losing the race (we'd die well before it does): leave now, while we still have HP
             hittable = self.can_hit(me, m)
             quick = hittable and (m.get("hp") or 1400.0) / self.our_dps(me, m, d, True) < 2.0
@@ -631,7 +661,7 @@ class FightMixin:
                     return
 
         if ENGAGE and getattr(self, "situation", "") == "squad" and m["kind"] == "mech" and \
-                not self.recovering and not self.late_zone and hp_frac > ENGAGE_MIN_HP:
+                not self.recovering and (all_in or (not self.late_zone and hp_frac > ENGAGE_MIN_HP)):
             g = self.engage_goal(me, m, t, d, theirs)
             if g is not None:
                 self.fight_goal, self.fight_mode = g
@@ -646,7 +676,7 @@ class FightMixin:
             hittable = self.can_hit(me, m)
             ttk = (m.get("hp") or 1400.0) / self.our_dps(me, m, d, hittable)
             hide_hp = POWER_BIG_HIDE_HP if getattr(self, "big", False) else HIDE_LOW_HP
-            if HIDE_LOW_HP and hp_frac < hide_hp and under_fire and not (hittable and ttk < 2.0):
+            if HIDE_LOW_HP and not all_in and hp_frac < hide_hp and under_fire and not (hittable and ttk < 2.0):
                 c = self.nav.flank_cell([eye(o) for o, _ in self.active], None, x, y, 45.0, t_start + 0.010)
                 if c >= 0:
                     self.fight_goal, self.fight_mode = self.nav.center(c), "HIDE"
