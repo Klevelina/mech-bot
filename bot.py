@@ -20,10 +20,9 @@ from drops import DropsMixin
 from fight import FightMixin
 from evade import EvadeMixin
 from artillery import ArtilleryMixin
-from ambush import AmbushMixin
 
 
-class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryMixin, AmbushMixin):
+class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryMixin):
     name = "mech-fight"
 
     def __init__(self, hello: mf.Hello):
@@ -282,11 +281,6 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         elif not mechs:
             self.fight_goal = None
             self.fight_goal_id = None
-        # a hunter we know of is out of our line of fire -> wait where it will walk into view (ambush.py)
-        ambushing = AMBUSH and self.nav is not None and self.escape is None and \
-            not contesting and not finishing and self.ambush_update(me, mechs, t, t_start)
-        if not ambushing:
-            self.amb = None
         safe = t - self.threat_t > SAFE_AFTER
         if self.escape is not None:
             self.set_goal(self.escape["goal"], x, y)
@@ -305,12 +299,6 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             dgoal = math.hypot(g[0] - x, g[1] - y)
             stop_r = 2.0
             mode = "FINISH"
-        elif ambushing:
-            g = self.amb["spot"] or (x, y)
-            self.set_goal(g, x, y)
-            dgoal = math.hypot(g[0] - x, g[1] - y)
-            stop_r = 2.0
-            mode = "AMBUSH"
         elif self.fight_goal is not None:
             self.set_goal(self.fight_goal, x, y)
             dgoal = math.hypot(self.fight_goal[0] - x, self.fight_goal[1] - y)
@@ -414,8 +402,6 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         jump = False
         boost = not me["in_zone"] or (self.escape is not None and me["energy"] > 30) or extra_boost or \
             (mode == "CONTEST" and dgoal > 6.0 and me["energy"] > 40) or             (mode == "FINISH" and dgoal > 8.0 and me["energy"] > 30)
-        if mode == "AMBUSH" and dgoal > 8.0 and me["energy"] > 50:
-            boost = True  # get to the waiting spot before it arrives
         if mode == "DISENGAGE" and dgoal > 3.0 and me["energy"] > 30:
             boost = True  # reach the hiding spot fast
         if LOOT_BOOST and mode in ("cube", "pickup", "crate", "npc", "pile", "explore") and dgoal > 15.0 and \
@@ -574,12 +560,6 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
                             act["fire"] = [ok and i == slot for i in range(2)]
                             break
 
-        # ---- ambush: aim where the hunter will appear (unless a mortar shell is going out at it)
-        if ambushing and not any(act.get("fire") or ()) and t >= self.mortar_commit[0]:
-            am = self.ambush_aim(me)
-            if am is not None:
-                act["aim"] = am
-
         # ---- reload: when calm, during a pause in a fight, or before picking one (never while landing shots)
         g = next((w for w in weapons if w and w["kind"] == "gun"), None)
         if g and g.get("reload", 0) == 0:
@@ -588,9 +568,7 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             calm = not mechs and shoot is None and ammo < mag / 2
             pause = RELOAD_IN_PAUSE and mechs and no_shot and ammo < mag * RELOAD_PAUSE_FRAC
             topup = hiding_laser and (not mechs or no_shot) and ammo < mag * LASER_RELOAD_FRAC
-            amb_top = ambushing and ammo < mag * AMB_RELOAD_FRAC and \
-                self.ambush_reload_ok(me, t, g["stats"].get("reload", 2.4))
-            if calm or pause or self.want_reload or topup or amb_top:
+            if calm or pause or self.want_reload or topup:
                 act["reload"] = True
         self.want_reload = False
 
