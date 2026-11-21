@@ -16,6 +16,13 @@ class FightMixin:
         `k` scales the horizontal lead (learned). Returns ([yaw, pitch], horizontal distance)."""
         mx, my, mz = me["pos"]
         mz += me["stats"].get("muzzle_height", 7)
+        if AIM_SELF_S:
+            # the shot leaves on the next ticks, from where we'll be then (matters when hopping or strafing)
+            sv = me.get("vel") or (0.0, 0.0, 0.0)
+            vz = sv[2]
+            if getattr(self, "jump_now", False) and me.get("grounded"):
+                vz = self.cfg["mech"].get("jump_speed", 11.0)  # jumping this decision: we'll be rising, not standing
+            mx, my, mz = mx + sv[0] * AIM_SELF_S, my + sv[1] * AIM_SELF_S, mz + vz * AIM_SELF_S
         px, py, pz = pos
         vx, vy, vz = vel if vel else (0.0, 0.0, 0.0)
         vx, vy = vx * k, vy * k
@@ -36,12 +43,21 @@ class FightMixin:
         pitch = max(st.get("min_pitch", -0.7), min(st.get("max_pitch", 1.3), math.atan2(az - mz, h)))
         return [math.atan2(ay - my, ax - mx), pitch], h
 
-    def fire(self, me, dist, aim, size, is_mech, late=False, gun_ok=True):
-        """fire flags for both slots at a target `dist` away along commanded `aim`; size = target radius."""
+    def fire(self, me, dist, aim, size, is_mech, late=False, gun_ok=True, vert=None):
+        """fire flags for both slots at a target `dist` away along commanded `aim`; size = target radius.
+        `vert`: up/down tolerance as a multiple of `size` (default 1.8 for a mech's full height, 1.0 otherwise)."""
         reserve = ENERGY_RESERVE_LATE if late else ENERGY_RESERVE
         cur = me["aim"]
-        err = abs(wrap(cur[0] - aim[0])) + abs(cur[1] - aim[1])
         tol = max(0.015, math.atan2(size, max(dist, 1.0)))
+        if AIM_SPLIT_TOL:
+            # sideways and up/down checked apart: a mech is 9 m tall but 5 m wide, so pitch can be off ~1.8x more
+            if vert is None:
+                vert = 1.8 if is_mech else 1.0
+            ptol = max(0.015, math.atan2(size * vert, max(dist, 1.0)))
+            yerr, perr = abs(wrap(cur[0] - aim[0])), abs(cur[1] - aim[1])
+            err = max(yerr, perr * tol / ptol)  # same units as before: on target when err < tol
+        else:
+            err = abs(wrap(cur[0] - aim[0])) + abs(cur[1] - aim[1])
         out = [False, False]
         for i, w in enumerate(me["weapons"]):
             if not w:
