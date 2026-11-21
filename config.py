@@ -62,3 +62,14 @@ FINISH_HP = 0.25       # ... its HP fraction below this
 FINISH_MIN_HP = 0.4    # ... and ours above this
 FINISH_S = 4.0         # ... keep going to where we last saw it this long
 FINISH_RANGE = {"lightning": 25.0, "laser": 100.0, "gun": 45.0}
+
+# ---- playbook: fight by loadout vs enemy loadout (playbook.py)
+PLAYBOOK = True        # distance bands per matchup, laser + lightning target loadout, no laser charge near lightning
+DROP_GUN_FOR_PAIR = False  # True: drop the gun as soon as we hold laser AND lightning (False: only late game)
+AWAY_HIDE_ALL = True   # backing off picks a spot hidden from every visible enemy, not just the one we back off from
+
+# ---- reloading (the magazine also reloads by itself when empty)
+RELOAD_IN_PAUSE = True   # target behind cover for the moment: reload if the magazine is below this fraction
+RELOAD_PAUSE_FRAC = 0.6
+RELOAD_BEFORE_HUNT = True  # gun-only: don't go hunting with less than this fraction of a magazine; reload first
+RELOAD_HUNT_FRAC = 0.5
