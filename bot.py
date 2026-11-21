@@ -51,6 +51,7 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         self.epos = {}          # id -> (t, pos, vel)   last known 3D state
         self.attackers = {}     # id -> last time it damaged us
         self.att_bearing = {}   # id -> bearing of its latest hit on us
+        self.laser_hits = {}    # id -> last time it hit us with a laser (LASER_HIDE)
         self.dmg_bearing = (-1e9, 0.0)  # (t, bearing) of the latest mech damage
         self.hits = {}          # id -> last time we hit it
         self.fire_since = {}    # id -> when we started shooting at it
@@ -132,6 +133,8 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             if e["type"] == "damaged" and e.get("by") is not None and e["by"] < 100:
                 self.threat_t = t
                 self.attackers[e["by"]] = t
+                if e.get("weapon") == "laser":
+                    self.laser_hits[e["by"]] = t
                 if e.get("bearing") is not None:
                     self.dmg_bearing = (t, e["bearing"])
                     self.att_bearing[e["by"]] = e["bearing"]
@@ -429,6 +432,11 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
                 and self.sound_face[2] > 0.6:
             yaw = self.sound_face[1]
             pitch = 0.05
+        hiding_laser = self.escape is not None and self.escape.get("laser")
+        if hiding_laser and not mechs:
+            # hidden from a laser: watch the way it would come (see it first, front armor toward it)
+            fx, fy = self.escape["from"][0], self.escape["from"][1]
+            yaw, pitch = math.atan2(fy - y, fx - x), 0.0
         act.update(move=move, boost=boost, jump=jump, aim=[yaw, pitch])
 
         # ---- take weapons in reach (swap rules in loot.weapon_take)
@@ -526,7 +534,8 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             ammo = g.get("ammo", 0)
             calm = not mechs and shoot is None and ammo < mag / 2
             pause = RELOAD_IN_PAUSE and mechs and no_shot and ammo < mag * RELOAD_PAUSE_FRAC
-            if calm or pause or self.want_reload:
+            topup = hiding_laser and (not mechs or no_shot) and ammo < mag * LASER_RELOAD_FRAC
+            if calm or pause or self.want_reload or topup:
                 act["reload"] = True
         self.want_reload = False
 

@@ -119,6 +119,15 @@ FIGHT_LOSE_R = 0.8     # being shot with odds below this: back off out of sight 
 DISENGAGE_R = 35.0     # ... only to a spot hidden from every visible enemy within this many metres (boost-run there);
                        #     none that close: stay and fight (running in the open only gets us shot longer)
 
+# ---- hide from lasers we can't answer: no laser of our own, lasered (or a laser charging on us) from beyond our reach
+LASER_HIDE = True
+LASER_HIDE_MIN = 60.0  # closer than this our gun / lightning can fight it: don't hide
+LASER_HIDE_R = 50.0    # hide only to a spot it can't see within this many metres (none: fight as usual)
+LASER_HOLD_S = 4.0     # stay hidden until this long without a laser hit; on leaving, a cover spot the laser could
+                       # see from where it was is swapped for another one. While hidden: watch its way in, top up
+                       # the gun; if it follows us within LASER_HIDE_MIN with a clear shot, stop hiding and shoot first
+LASER_RELOAD_FRAC = 0.75  # hidden from a laser: reload below this fraction of a magazine
+
 # ---- faster looting
 LOOT_GIVEUP_S = 15.0   # give up on an item after this long (was 40 s)
 LOOT_CRATE_SHOOT_R = 90.0  # start shooting a visible crate this far away, while still walking (was 60 m)
