@@ -1,14 +1,15 @@
 """Loot: remember items we have seen, pick what to go for, weapon swap rules, upgrade picks."""
 import math
 
-from config import LIGHTNING_FIRST, PLAYBOOK, DROP_GUN_FOR_PAIR
+from config import LIGHTNING_FIRST, PLAYBOOK, DROP_GUN_FOR_PAIR, MORTAR_USE
 
 # What a found item is worth before distance (rough "cubes" scale).
-VALUE = {"cube": 3.0, "crate": 2.5, "npc": 5.0}  # a drone drops 2 cubes
+VALUE = {"cube": 3.0, "crate": 2.5, "npc": 5.0, "pile": 6.0}  # a drone drops 2 cubes
 # Upgrade picks, first available wins. Plating/armor/nanites keep us alive; the rest are fillers.
 # With LIGHTNING_FIRST, lightning's chain/range come right after plating/armor (only offered if we hold it).
 UPGRADE_ORDER = (["plating", "lightning_chain", "armor", "lightning_range", "nanites", "lightning_efficiency", "sensors"]
                  if LIGHTNING_FIRST else ["plating", "armor", "nanites", "sensors", "lightning_efficiency"]) +                 ["laser_charge", "laser_damage", "lightning_range", "lightning_chain",
+                 "mortar_reload", "mortar_velocity", "mortar_splash",
                  "gun_damage", "gun_rate", "gun_mag", "gun_velocity",
                  "servos", "capacitor", "reactor", "gyros", "jets"]
 SPECIALS = ("laser", "lightning")
@@ -28,6 +29,12 @@ def weapon_take(kind, weapons, late, fighting):
     Rules: never mortar or a second gun; empty slot -> take; mortar in slot 1 -> swap it;
     swap the other special toward the stage's preference (laser early, lightning late);
     late game also replace the gun with the second special. Never swap during a fight."""
+    if kind == "mortar":
+        # better than an empty slot; never instead of a laser/lightning (those replace it later)
+        kinds = [w["kind"] if w else None for w in weapons]
+        if MORTAR_USE and None in kinds and "mortar" not in kinds and                 not any(w and w.get("charge", 0) > 0 for w in weapons):
+            return "empty"
+        return None
     if kind not in SPECIALS:
         return None
     kinds = [w["kind"] if w else None for w in weapons]
@@ -118,7 +125,7 @@ class Memory:
             it["ok"], it["cell"] = ok, cell
         return it["cell"] if it["ok"] else -1
 
-    def best_target(self, me, zone, weapons, late, max_dist, danger):
+    def best_target(self, me, zone, weapons, late, max_dist, danger, skip=()):
         """(id, item) worth going for, or (None, None). `danger(x, y)` -> True to skip."""
         x, y = me["pos"][0], me["pos"][1]
         nc, nr = zone["next_center"], zone["next_radius"]
@@ -128,11 +135,15 @@ class Memory:
             if i in self.banned:
                 continue
             k = it["kind"]
+            if k in skip:
+                continue
             if k == "pickup":
                 d = weapon_take(it["wkind"], weapons, late, False)
                 if d is None:
                     continue
                 v = 5.0 if d == "empty" else 3.0
+                if it["wkind"] == "mortar":
+                    v = 3.0
                 if LIGHTNING_FIRST and it["wkind"] == "lightning":
                     v += 2.0
                 if PLAYBOOK:

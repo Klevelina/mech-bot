@@ -19,9 +19,10 @@ from senses import SensesMixin
 from drops import DropsMixin
 from fight import FightMixin
 from evade import EvadeMixin
+from artillery import ArtilleryMixin
 
 
-class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin):
+class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryMixin):
     name = "mech-fight"
 
     def __init__(self, hello: mf.Hello):
@@ -78,6 +79,9 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin):
         self.finish_m = None
         self.finish_now = None
         self.want_reload = False  # set by hunting: reload before going in
+        self.recovering = False   # healing up after a fight (see RECOVER)
+        self.mortar_commit = (-1e9, None)  # (until t, target id): keep the torso on the mortar solution
+        self.spawn_yaw = None
         self.snd_i = 0
         self.drop_target = None
         self.drop_since = 0.0
@@ -158,6 +162,13 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin):
         if SOUNDS:
             self.hear(obs, x, y, t)
         fighting = t - self.threat_t < 3.0
+        # recovery: after a fight, below RECOVER_HP -> no shooting things (it resets the 5 s regen timer),
+        # no exploring/hunting; pick up only what needs no shooting, close by; hold cover until healed
+        hp_frac = me["hp"] / max(1.0, me["max_hp"])
+        if RECOVER and not self.recovering and hp_frac < RECOVER_HP and t - self.threat_t > 3.0:
+            self.recovering = True
+        elif self.recovering and hp_frac >= RECOVER_UNTIL:
+            self.recovering = False
         late = obs["alive"] <= 5 or zone["next_radius"] <= 70
         self.late_zone = LATE_GAME and zone["next_radius"] <= LATE_RADIUS
         self.update_escape(me, mechs, t, t_start)
@@ -186,7 +197,10 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin):
             if self.target is None or t - self.retarget_t > 1.0:
                 self.retarget_t = t
                 md = LOOT_MAX_DIST if t < LOOT_UNTIL else LOOT_LATE_DIST
-                tid, _ = self.mem.best_target(me, zone, weapons, late, md, lambda ix, iy: self.danger(ix, iy, t))
+                skip = ()
+                if self.recovering:
+                    md, skip = min(md, RECOVER_LOOT_DIST), ("crate", "npc")
+                tid, _ = self.mem.best_target(me, zone, weapons, late, md, lambda ix, iy: self.danger(ix, iy, t), skip)
                 if tid != self.target:
                     self.target, self.target_since = tid, t
             if self.target is not None:
@@ -244,7 +258,7 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin):
             g, stop_r, mode = self._drop_now
             self.set_goal(g, x, y)
             dgoal = math.hypot(g[0] - x, g[1] - y)
-        elif target is None and EXPLORE and safe and t < EXPLORE_UNTIL and self.nav is not None and \
+        elif target is None and EXPLORE and safe and not self.recovering and t < EXPLORE_UNTIL and                 self.nav is not None and \
                 self._explore(x, y, zone, t):
             gx, gy = self.explore_goal
             self.set_goal(self.explore_goal, x, y)
@@ -369,6 +383,11 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin):
             yaw = math.atan2(zone["center"][1] - y, zone["center"][0] - x)
             if SWEEP and not fighting:
                 yaw += 1.0 * math.sin(t * 0.5)
+        if OPENING_SCAN and t < 3.0 and not mechs:
+            # first 3 s: one full turn of the torso to spot loot and the first hunter
+            if self.spawn_yaw is None:
+                self.spawn_yaw = me["aim"][0]
+            yaw = self.spawn_yaw + t * 2.2
         pitch = 0.0
         # hit by someone we can't see: face them (front armor) and look for them
         if FACE_ATTACKER and not mechs and t - self.dmg_bearing[0] < 3.0:
@@ -432,11 +451,38 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin):
                 act["fire"] = fire
                 if LEARN_AIM and is_mech and speed and any(f and w and w["kind"] == "gun" for f, w in zip(fire, weapons)):
                     self.aim.record(t, m, tt)
+            # mortar: over cover, at a slow/standing target, or at a bunched pair (gun can't do those well)
+            if is_mech and not (self.late_zone and not self.late_fire_ok(me, m, h, t)):
+                gw = next((w for w in weapons if w and w["kind"] == "gun"), None)
+                gun_ready = gw is not None and gw.get("ammo", 0) > 0 and gw.get("reload", 0) <= 0
+                # empty / reloading gun: the mortar takes the shot instead of holding fire
+                plan = self.mortar_plan(me, m, t, gun_has_shot=zoff is not None and gun_ready, others=mechs)
+                if plan is None and self.mortar_commit[1] == m["id"] and t < self.mortar_commit[0]:
+                    plan = self.mortar_plan(me, m, t, gun_has_shot=False, others=mechs)  # finish turning onto it
+                if plan is not None:
+                    maim, slot = plan
+                    if self.mortar_commit[1] != m["id"] or t >= self.mortar_commit[0]:
+                        self.mortar_commit = (t + 1.5, m["id"])
+                    act["aim"] = maim
+                    ok = abs(wrap(me["aim"][0] - maim[0])) < 0.03 and abs(me["aim"][1] - maim[1]) < 0.03
+                    act["fire"] = [ok and i == slot for i in range(2)]
             e = m["pos"]
             mf.draw.line([x, y, z + 7], [e[0], e[1], e[2] + 4.5], "#ff5040")
         else:
             self.cur = None
             self.fire_since.clear()
+            # nobody visible: lob a shell at an enemy that just ducked behind a building (seen < 2 s ago)
+            if MORTAR_USE and self.mortar_slot(weapons) is not None and not self.late_zone:
+                for eid, (et, epos, evel) in self.epos.items():
+                    if eid < 100 and t - et < 2.0:
+                        plan = self.mortar_plan(me, {"id": eid, "kind": "mech", "pos": epos, "vel": [0.0, 0.0, 0.0]},
+                                                t, gun_has_shot=False)
+                        if plan is not None:
+                            maim, slot = plan
+                            act["aim"] = maim
+                            ok = abs(wrap(me["aim"][0] - maim[0])) < 0.03 and abs(me["aim"][1] - maim[1]) < 0.03
+                            act["fire"] = [ok and i == slot for i in range(2)]
+                            break
 
         # ---- reload: when calm, during a pause in a fight, or before picking one (never while landing shots)
         g = next((w for w in weapons if w and w["kind"] == "gun"), None)
