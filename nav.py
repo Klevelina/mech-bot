@@ -1,0 +1,339 @@
+"""Walk grid + time-sliced A* for mechfight. Standard library only.
+
+Grid: square cells (default 2 m) over the terrain. Each cell has a surface height (terrain, or the top of
+a prism standing on it), and an 8-bit mask of the directions you can walk out of it (climb <= step_up
+onto prisms, <= slope limit on terrain, any drop down, no corner cutting).
+"""
+from __future__ import annotations
+
+import array
+import heapq
+import json
+import math
+import os
+import sys
+import time
+from collections import deque
+
+SQ2 = math.sqrt(2.0)
+# direction k: (dx, dy); bit 1<<k in the mask
+DIRS = [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)]
+OPP = [1, 0, 3, 2, 7, 6, 5, 4]
+# a diagonal needs both of its orthogonal moves
+DIAG_NEEDS = {4: (0, 2), 5: (0, 3), 6: (1, 2), 7: (1, 3)}
+
+
+def _log(*a):
+    print(*a, file=sys.stderr, flush=True)
+
+
+class Nav:
+    def __init__(self, map_dir: str, mech: dict, cell: float = 2.0):
+        t0 = time.perf_counter()
+        with open(os.path.join(map_dir, "v2", "world.json"), encoding="utf-8") as f:
+            world = json.load(f)
+        ter = world["terrain"]
+        tnx, tny = int(ter["nx"]), int(ter["ny"])
+        tx0, ty0, ts = float(ter["minX"]), float(ter["minY"]), float(ter["step"])
+        hsc = float(ter.get("scale", 0.01))
+        hm = array.array("h")
+        with open(os.path.join(map_dir, "v2", ter.get("file", "terrain.i16")), "rb") as f:
+            hm.frombytes(f.read())
+        if sys.byteorder == "big":
+            hm.byteswap()
+        self.hm, self.tnx, self.tny, self.tx0, self.ty0, self.ts, self.hsc = hm, tnx, tny, tx0, ty0, ts, hsc
+
+        step_up = float(mech.get("step_up", 1.2))
+        slope = math.radians(float(mech.get("max_slope_deg", 50)))
+        head = float(mech.get("height", 9))
+
+        self.cell = cell
+        self.ox, self.oy = tx0, ty0
+        W = int(((tnx - 1) * ts) // cell)
+        H = int(((tny - 1) * ts) // cell)
+        N = W * H
+        self.W, self.H, self.N = W, H, N
+
+        # --- ground at cell centers (nearest terrain vertex)
+        ground = array.array("f", [0.0]) * N
+        vcol = [min(tnx - 1, int(round((i + 0.5) * cell / ts))) for i in range(W)]
+        for j in range(H):
+            vj = min(tny - 1, int(round((j + 0.5) * cell / ts)))
+            row = vj * tnx
+            base = j * W
+            for i in range(W):
+                ground[base + i] = hm[row + vcol[i]] * hsc
+
+        # --- steep terrain: any 1-step vertex pair steeper than the slope limit
+        lim = math.tan(slope) * ts / hsc  # in raw units
+        steep = bytearray(N)
+        for vj in range(tny - 1):
+            r0 = hm[vj * tnx:(vj + 1) * tnx]
+            r1 = hm[(vj + 1) * tnx:(vj + 2) * tnx]
+            for vi, (a, b, c) in enumerate(zip(r0, r0[1:], r1)):
+                if a - b > lim or b - a > lim or a - c > lim or c - a > lim:
+                    ci = int(vi * ts / cell)
+                    cj = int(vj * ts / cell)
+                    if ci < W and cj < H:
+                        steep[cj * W + ci] = 1
+
+        # --- prisms: rasterize at half-cell resolution, keep the max top over each cell
+        surf = array.array("f", ground)
+        roof = bytearray(N)
+        sub = cell / 2.0
+        SW, SH = 2 * W, 2 * H
+        ox, oy = self.ox, self.oy
+        for p in world["prisms"]:
+            pbase, ptop = float(p["base"]), float(p["top"])
+            edges = []
+            for r in [p["ring"]] + list(p.get("holes") or []):
+                n = len(r) // 2
+                for k in range(n):
+                    x1, y1 = r[2 * k], r[2 * k + 1]
+                    k2 = (k + 1) % n
+                    x2, y2 = r[2 * k2], r[2 * k2 + 1]
+                    if y1 != y2:
+                        edges.append((x1, y1, (x2 - x1) / (y2 - y1), y2))
+            ys = p["ring"][1::2]
+            sj0 = max(0, int((min(ys) - oy) / sub))
+            sj1 = min(SH - 1, int((max(ys) - oy) / sub) + 1)
+            for sj in range(sj0, sj1 + 1):
+                y = oy + (sj + 0.5) * sub
+                xs = sorted(x1 + (y - y1) * k for (x1, y1, k, y2) in edges if (y1 <= y) != (y2 <= y))
+                cj = sj >> 1
+                rowc = cj * W
+                for a, b in zip(xs[0::2], xs[1::2]):
+                    si0 = max(0, math.ceil((a - ox) / sub - 0.5))
+                    si1 = min(SW - 1, math.floor((b - ox) / sub - 0.5))
+                    for si in range(si0, si1 + 1):
+                        c = rowc + (si >> 1)
+                        if pbase > ground[c] + head:
+                            continue  # clears our head: walk under it
+                        if ptop > surf[c]:
+                            surf[c] = ptop
+                        roof[c] = 1
+
+        # --- blocked: map border, steep bare terrain
+        blocked = bytearray(N)
+        for i in range(W):
+            blocked[i] = 1
+            blocked[(H - 1) * W + i] = 1
+        for j in range(H):
+            blocked[j * W] = 1
+            blocked[j * W + W - 1] = 1
+        for c in range(N):
+            if steep[c] and not roof[c]:
+                blocked[c] = 1
+
+        # --- direction masks
+        terr_up = max(step_up, 0.9 * cell * math.tan(slope))
+        prism_up = step_up + 0.1
+        offs = [dx + dy * W for dx, dy in DIRS]
+        self.offs = offs
+        mask = bytearray(N)
+        for j in range(1, H - 1):
+            for c in range(j * W + 1, j * W + W - 1):
+                s = surf[c]
+                rc = roof[c]
+                m = 0
+                for k in range(4):
+                    n = c + offs[k]
+                    if blocked[n]:
+                        continue
+                    up = prism_up if (rc or roof[n]) else terr_up
+                    if surf[n] - s <= up:
+                        m |= 1 << k
+                for k in range(4, 8):
+                    a, b = DIAG_NEEDS[k]
+                    if not (m >> a & 1 and m >> b & 1):
+                        continue
+                    n = c + offs[k]
+                    if blocked[n]:
+                        continue
+                    up = prism_up if (rc or roof[n]) else terr_up * SQ2
+                    if surf[n] - s <= up:
+                        m |= 1 << k
+                mask[c] = m
+
+        # --- extra cost near walls (1 ring: +1.5, 2 rings: +0.5)
+        extra = array.array("f", [0.0]) * N
+        near = [c for c in range(N) if not blocked[c] and mask[c] != 0xFF]
+        for c in near:
+            extra[c] = 1.5
+        for c in near:
+            for o in offs:
+                n = c + o
+                if 0 <= n < N and extra[n] < 0.5:
+                    extra[n] = 0.5
+
+        # --- connected components (4-neighbour, both directions walkable)
+        comp = array.array("i", [-1]) * N
+        sizes = []
+        for s0 in range(N):
+            if comp[s0] != -1 or blocked[s0] or not mask[s0]:
+                continue
+            cid = len(sizes)
+            comp[s0] = cid
+            q = deque([s0])
+            cnt = 0
+            while q:
+                c = q.popleft()
+                cnt += 1
+                m = mask[c]
+                for k in range(4):
+                    if m >> k & 1:
+                        n = c + offs[k]
+                        if comp[n] == -1 and mask[n] >> OPP[k] & 1:
+                            comp[n] = cid
+                            q.append(n)
+            sizes.append(cnt)
+        self.main = max(range(len(sizes)), key=sizes.__getitem__) if sizes else -1
+
+        # --- cover cells: in the main component, next to a wall taller than a mech's eyes
+        cover = []
+        for c in near:
+            if comp[c] != self.main:
+                continue
+            s = surf[c]
+            for o in offs:
+                if surf[c + o] - s > 8.0:
+                    x, y = self.center(c)
+                    cover.append((c, x, y))
+                    break
+
+        self.surf, self.roof, self.blocked, self.mask, self.extra, self.comp = surf, roof, blocked, mask, extra, comp
+        self.cover = cover
+        self.build_s = time.perf_counter() - t0
+        _log(f"nav: {W}x{H} cells, {len(sizes)} comps, main={sizes[self.main] if sizes else 0} cells, "
+             f"{len(cover)} cover, built in {self.build_s:.2f}s")
+
+    # --- geometry helpers
+    def cell_of(self, x: float, y: float) -> int:
+        i = min(self.W - 1, max(0, int((x - self.ox) / self.cell)))
+        j = min(self.H - 1, max(0, int((y - self.oy) / self.cell)))
+        return j * self.W + i
+
+    def center(self, c: int):
+        j, i = divmod(c, self.W)
+        return self.ox + (i + 0.5) * self.cell, self.oy + (j + 0.5) * self.cell
+
+    def ground_z(self, x: float, y: float) -> float:
+        """Bilinear terrain height (ignores prisms)."""
+        fx = (x - self.tx0) / self.ts
+        fy = (y - self.ty0) / self.ts
+        i = min(self.tnx - 2, max(0, int(fx)))
+        j = min(self.tny - 2, max(0, int(fy)))
+        u, v = fx - i, fy - j
+        hm, n = self.hm, self.tnx
+        a, b = hm[j * n + i], hm[j * n + i + 1]
+        c, d = hm[(j + 1) * n + i], hm[(j + 1) * n + i + 1]
+        return ((a * (1 - u) + b * u) * (1 - v) + (c * (1 - u) + d * u) * v) * self.hsc
+
+    def nearest_main(self, x: float, y: float, max_r: int = 40) -> int:
+        """Closest cell of the main ground component to (x, y)."""
+        c0 = self.cell_of(x, y)
+        if self.comp[c0] == self.main:
+            return c0
+        j0, i0 = divmod(c0, self.W)
+        for r in range(1, max_r):
+            best, bd = -1, 1e18
+            for dj in range(-r, r + 1):
+                for di in (-r, r) if abs(dj) != r else range(-r, r + 1):
+                    i, j = i0 + di, j0 + dj
+                    if 0 <= i < self.W and 0 <= j < self.H:
+                        c = j * self.W + i
+                        if self.comp[c] == self.main:
+                            d = di * di + dj * dj
+                            if d < bd:
+                                best, bd = c, d
+            if best >= 0:
+                return best
+        return c0
+
+    def penalize(self, x: float, y: float, radius_cells: int = 2, amount: float = 25.0) -> None:
+        j0, i0 = divmod(self.cell_of(x, y), self.W)
+        for dj in range(-radius_cells, radius_cells + 1):
+            for di in range(-radius_cells, radius_cells + 1):
+                i, j = i0 + di, j0 + dj
+                if 0 <= i < self.W and 0 <= j < self.H:
+                    self.extra[j * self.W + i] += amount
+
+
+class Search:
+    """Weighted A*, run in slices with step(deadline). When finished, `path` is a list of cells
+    (start..goal) and `reached` says whether it got to the goal (else it ends at the closest cell found)."""
+
+    def __init__(self, nav: Nav, start: int, goal: int, weight: float = 1.5, max_exp: int = 120000):
+        self.nav, self.start, self.goal, self.w, self.max_exp = nav, start, goal, weight, max_exp
+        self.gj, self.gi = divmod(goal, nav.W)
+        h0 = self._h(start)
+        self.g = {start: 0.0}
+        self.came = {start: -1}
+        self.open = [(h0 * weight, 0.0, start)]
+        self.best, self.best_h = start, h0
+        self.exp = 0
+        self.done = False
+        self.reached = False
+        self.path = None
+        self.moves = [(1 << k, nav.offs[k], 1.0 if k < 4 else SQ2) for k in range(8)]
+
+    def _h(self, c: int) -> float:
+        j, i = divmod(c, self.nav.W)
+        dx = abs(i - self.gi)
+        dy = abs(j - self.gj)
+        return dx + dy + (SQ2 - 2.0) * min(dx, dy)
+
+    def step(self, deadline: float) -> bool:
+        if self.done:
+            return True
+        nav = self.nav
+        mask, extra, W = nav.mask, nav.extra, nav.W
+        g, came, op, w = self.g, self.came, self.open, self.w
+        gi, gj, goal = self.gi, self.gj, self.goal
+        moves = self.moves
+        pop, push = heapq.heappop, heapq.heappush
+        k = 2.0 - SQ2
+        n_iter = 0
+        while op:
+            n_iter += 1
+            if n_iter & 127 == 0 and time.perf_counter() > deadline:
+                return False
+            f, gc, c = pop(op)
+            if gc > g.get(c, 1e18):
+                continue
+            if c == goal:
+                self._finish(c, True)
+                return True
+            self.exp += 1
+            if self.exp > self.max_exp:
+                break
+            hc = (f - gc) / w
+            if hc < self.best_h:
+                self.best, self.best_h = c, hc
+            m = mask[c]
+            if not m:
+                continue
+            for bit, off, cost in moves:
+                if m & bit:
+                    n = c + off
+                    ng = gc + cost + extra[n]
+                    if ng < g.get(n, 1e18):
+                        g[n] = ng
+                        came[n] = c
+                        j, i = divmod(n, W)
+                        dx = i - gi if i > gi else gi - i
+                        dy = j - gj if j > gj else gj - j
+                        h = dx + dy - k * (dx if dx < dy else dy)
+                        push(op, (ng + w * h, ng, n))
+        self._finish(self.best, False)
+        return True
+
+    def _finish(self, end: int, reached: bool) -> None:
+        path = []
+        c = end
+        while c != -1:
+            path.append(c)
+            c = self.came[c]
+        path.reverse()
+        self.path, self.reached, self.done = path, reached, True
+        self.g = self.came = self.open = None  # free memory
