@@ -37,12 +37,32 @@ HIDE_LOW_HP = 0.30     # below this HP fraction, under fire: hide from every att
 EXPLORE = True         # early, with nothing to loot: walk to unexplored areas to find loot
 EXPLORE_UNTIL = 100.0  # match time
 EXPLORE_BIN = 25.0     # m, size of the "have we looked here" bins
-FIELD = True           # in fights, stand where (expected damage taken) - (expected damage dealt) is lowest
+FIELD = False          # in fights, stand where (expected damage taken) - (expected damage dealt) is lowest
 FIELD_H = 3.0          # ... over this many seconds
 FIELD_KILL_W = 1.0     # ... weight of "fraction of an enemy we kill" vs "fraction of our HP we lose"
-JINK = True            # step side to side (learned pattern) while a gun is shooting at us
-DODGE = True           # sidestep lasers aimed at us while charging; leave mortar landing spots
+JINK = False           # step side to side (learned pattern) while a gun is shooting at us
+DODGE = False          # sidestep lasers aimed at us while charging; leave mortar landing spots
+SOUNDS = True          # face suspicious sounds, treat nearby movement as a threat, mark fights on the danger map
+SOUND_FACE_S = 2.5     # how long to keep facing a sound
+DROPS = True           # go for supply drops when it looks safe
+DROP_MAX_DIST = 220.0  # m (x1.3 when HP is below half)
+DROP_DANGER_R = 100.0  # skip a drop if an enemy was seen/heard this close to it in the last 20 s
+CONTEST = True         # one mech capturing a drop, we reach the ring before it finishes and would win: go in
+CONTEST_MIN_HP = 0.5   # ... only above this HP fraction
+CONTEST_MAX_DIST = 80.0  # ... and only this close (less open ground to cross); sniping has no distance limit
+PARK_EXPOSURE = True   # park in corners/alcoves (few open directions) and face the open side
+EXPO_W = 6.0           # m of extra walking we accept per open direction avoided (of 12)
+HUNT = True            # one enemy in sight, nobody else on us, healthy: close to our weapon's range and fight
+HUNT_HP = 0.6          # ... "healthy"
+HUNT_RANGE = {"lightning": 30.0, "laser": 110.0, "gun": 70.0}
 SLICE_S = 0.020        # A* time per decision
+
+# sound kind -> how much it says "an enemy mech is there" (x band multiplier). npc_gun/crate/drop/death: ignored
+SOUND_PRIO = {"step": 3.0, "boost": 3.0, "jet": 3.0, "reload": 3.0, "laser_charge": 3.0,
+              "lightning": 2.5, "gun": 2.0, "laser": 2.0, "mortar": 1.5, "explosion": 1.0}
+BAND_MULT = {"near": 1.0, "mid": 0.6, "far": 0.25}
+BAND_DIST = {"near": 35.0, "mid": 110.0, "far": 230.0}  # rough distance for each band
+MOVE_SOUNDS = ("step", "boost", "jet", "reload", "laser_charge")
 
 
 def wrap(a):
@@ -98,6 +118,17 @@ class Bot:
         self.explore_goal = None
         self.explore_t = -1e9
         self.npc_attackers = {}  # drone id -> last time it hit us
+        self.sound_face = None  # (t heard, bearing, priority) of the most telling recent sound
+        self.expo = {}          # cover cell -> (open directions, yaw to face)
+        self.cover_face = None  # yaw to watch while parked at the current cover
+        self.snd_i = 0
+        self.drop_target = None
+        self.drop_since = 0.0
+        self.drop_check_t = -1e9
+        self.drop_banned = set()
+        self.drop_stage = {}    # drop id -> where to wait for it
+        self.contest = None     # (goal, drop id) while contesting someone else's capture
+        self.capturers = {}     # mech id -> last time it was capturing a drop (don't hunt into its full-HP payout)
         self.dmg_log = {}       # attacker id -> deque of (t, amount)
         self.active = []        # [(foe, its dps on us)] this decision
         npc = cfg.get("npc", {})
@@ -119,18 +150,30 @@ class Bot:
             return (nc[0], nc[1])
         if R < 15:
             return nav.center(nav.nearest_main(nc[0], nc[1]))
-        best, bs = None, 1e18
         R2 = R * R
+        cands = []
         for c, x, y in nav.cover:
             dx, dy = x - nc[0], y - nc[1]
             d2 = dx * dx + dy * dy
             if d2 > R2 or c in self.bad:
                 continue
-            s = math.hypot(x - mx, y - my) + 0.6 * math.sqrt(d2)
-            if s < bs:
-                best, bs = c, s
-        if best is None:
-            best = nav.nearest_main(nc[0], nc[1])
+            cands.append((math.hypot(x - mx, y - my) + 0.6 * math.sqrt(d2), c))
+        if not cands:
+            self.cover_face = None
+            return nav.center(nav.nearest_main(nc[0], nc[1]))
+        cands.sort()
+        best, bs, bface = cands[0][1], 1e18, None
+        if PARK_EXPOSURE:
+            # among the closest candidates, prefer corners/alcoves: few directions an enemy can see us from
+            for s, c in cands[:60]:
+                e = self.expo.get(c)
+                if e is None:
+                    e = self.expo[c] = nav.exposure(c)
+                n_open, face = e
+                s += EXPO_W * n_open + (10.0 if n_open == 0 else 0.0)  # fully enclosed: can't see anyone coming
+                if s < bs:
+                    best, bs, bface = c, s, face
+        self.cover_face = bface
         return nav.center(best)
 
     def set_goal(self, xy, x, y):
@@ -146,11 +189,148 @@ class Bot:
             return
         self.search = Search(self.nav, self.nav.cell_of(mx, my), self.nav.cell_of(*self.goal))
 
-    def danger(self, ix, iy, t):
+    def danger(self, ix, iy, t, r=DANGER_R, s=DANGER_S):
         for et, ex, ey in self.enemies.values():
-            if t - et < DANGER_S and (ex - ix) ** 2 + (ey - iy) ** 2 < DANGER_R ** 2:
+            if t - et < s and (ex - ix) ** 2 + (ey - iy) ** 2 < r * r:
                 return True
         return False
+
+    # ---------- sounds
+    def hear(self, obs, x, y, t):
+        for s in obs.get("sounds", []):
+            kind, band = s.get("kind"), s.get("dist")
+            base = SOUND_PRIO.get(kind)
+            if base is None or band not in BAND_MULT:
+                continue
+            p = base * BAND_MULT[band]
+            th = t - s.get("age", 0.0)
+            b = s["bearing"]
+            sf = self.sound_face
+            if sf is None or p >= sf[2] or th - sf[0] > 1.5:
+                self.sound_face = (th, b, p)
+            if band != "far":  # rough position on the danger map (loot / explore / drops avoid it)
+                dd = BAND_DIST[band]
+                self.enemies[("snd", self.snd_i % 40)] = (th, x + dd * math.cos(b), y + dd * math.sin(b))
+                self.snd_i += 1
+            if kind in MOVE_SOUNDS and band == "near":
+                self.threat_t = max(self.threat_t, th)  # a mech moving within ~40 m: stop looting, be ready
+
+    # ---------- supply drops
+    def contest_goal(self, obs, me, t):
+        """Someone else is capturing a drop. Two mechs in the ring freeze its clock, so we only need to get in
+        before it finishes; then the fight decides. Go only if it's alone there, we arrive in time,
+        and we'd win the fight at ring distance. Returns the ring center or None."""
+        x, y = me["pos"][0], me["pos"][1]
+        hp_frac = me["hp"] / max(1.0, me["max_hp"])
+        if hp_frac < CONTEST_MIN_HP:
+            return None
+        st = me["stats"]
+        speed = st.get("boost_speed", 19.5) if me["energy"] > 40 else st.get("walk_speed", 11.7)
+        for d in obs.get("drops", []):
+            holder = d.get("holder")
+            if holder is None or d.get("lands_in", 0) > 0:
+                continue
+            px, py = d["pos"][0], d["pos"][1]
+            dist = math.hypot(px - x, py - y)
+            if holder == me["id"]:
+                if dist < 30.0:  # our clock is running (e.g. they stepped out): stay in the ring and finish
+                    return self.nav.center(self.nav.nearest_main(px, py)), d["id"], "HOLDRING", None
+                continue
+            rad = d.get("radius", 8.0)
+            inside = dist < rad * 0.8
+            remaining = d.get("capture_s", 4.0) - d.get("progress", 0.0)
+            eta = max(0.0, dist - rad * 0.85) * 1.2 / speed  # time to just inside the ring edge
+            seen = next((m for m in obs["mechs"] if m["id"] == holder), None)
+            their_hp = seen["hp"] if seen and seen.get("hp") is not None else self.emodel.hp.get(holder, 1400.0)
+            # 1) snipe: from where we stand, can we kill it before its clock runs out? (no running in the open)
+            if seen is not None and not inside and self.can_hit(me, seen):
+                hd = math.hypot(seen["pos"][0] - x, seen["pos"][1] - y)
+                if self.our_dps(me, seen, hd, True) * max(0.0, remaining - 0.5) >= their_hp:
+                    return (x, y), d["id"], "SNIPE", holder
+            # 2) contest: run into the ring (freezes its clock) - only if close and we'd win
+            if not inside and (dist > CONTEST_MAX_DIST or eta > remaining - 0.3):
+                continue
+            # anyone else around the drop? then it's a brawl: keep our HP
+            crowded = False
+            for key, (et, qx, qy) in self.enemies.items():
+                if key != holder and t - et < 10.0 and math.hypot(qx - px, qy - py) < 80.0:
+                    if isinstance(key, tuple) and holder in self.emodel.pos and \
+                            math.hypot(qx - self.emodel.pos[holder][1][0], qy - self.emodel.pos[holder][1][1]) < 40:
+                        continue  # a sound from the holder itself
+                    crowded = True
+                    break
+            if crowded:
+                continue
+            # would we win at ring distance?
+            pseudo = seen or {"id": holder, "kind": "mech", "pos": [px, py, d["pos"][2]], "cubes": 0,
+                              "aim": [math.atan2(y - py, x - px), 0.0]}  # unseen: assume it faces us
+            ours = self.our_dps(me, pseudo, 6.0, True)
+            theirs = max(1.0, self.emodel.dps_at(holder, 6.0, t))
+            if their_hp / ours < 0.8 * me["hp"] / theirs:
+                c = self.nav.nearest_main(px, py)
+                return self.nav.center(c), d["id"], "CONTEST", holder
+        return None
+
+    def _contest(self, obs, me, t):
+        self.contest = self.contest_goal(obs, me, t)
+        return self.contest is not None
+
+    def _drop(self, obs, me, t):
+        self._drop_now = self.drop_goal(obs, me, t)
+        return self._drop_now is not None
+
+    def drop_goal(self, obs, me, t):
+        """(goal, stop radius, label) while going for a supply drop, else None."""
+        nav = self.nav
+        x, y = me["pos"][0], me["pos"][1]
+        drops = {d["id"]: d for d in obs.get("drops", [])}
+        walk = me["stats"].get("walk_speed", 11.7)
+        if self.drop_target is not None:
+            d = drops.get(self.drop_target)
+            if d is None:
+                self.drop_target = None  # captured (by us or someone else)
+            elif (d.get("holder") not in (None, me["id"]) and d.get("progress", 0) > 0.5) or t - self.drop_since > 75:
+                self.drop_banned.add(self.drop_target)  # someone else is taking it, or it's taking too long
+                self.drop_target = None
+        if self.drop_target is None and t - self.drop_check_t > 1.0:
+            self.drop_check_t = t
+            hp_frac = me["hp"] / max(1.0, me["max_hp"])
+            maxd = DROP_MAX_DIST * (1.3 if hp_frac < 0.5 else 1.0)
+            best, be = None, 1e18
+            for d in drops.values():
+                if d["id"] in self.drop_banned or d.get("holder") not in (None, me["id"]):
+                    continue
+                px, py = d["pos"][0], d["pos"][1]
+                dist = math.hypot(px - x, py - y)
+                eta = dist * 1.3 / walk
+                if dist > maxd or (d.get("lands_in", 0) <= 0 and eta > 25):
+                    continue
+                if self.danger(px, py, t, DROP_DANGER_R, 20.0):
+                    continue
+                if eta < be:
+                    best, be = d["id"], eta
+            if best is not None:
+                self.drop_target, self.drop_since = best, t
+                mf.log(f"t={t:.1f} going for drop {best}")
+        if self.drop_target is None:
+            return None
+        d = drops[self.drop_target]
+        px, py = d["pos"][0], d["pos"][1]
+        eta = math.hypot(px - x, py - y) * 1.3 / walk
+        if d.get("lands_in", 0) > eta + 4:
+            # early: wait at cover near it instead of standing in the open
+            st = self.drop_stage.get(self.drop_target)
+            if st is None:
+                best, bd = None, 35.0
+                for c, cx, cy in nav.cover:
+                    dd = math.hypot(cx - px, cy - py)
+                    if 10.0 < dd < bd:
+                        best, bd = (cx, cy), dd
+                st = best or nav.center(nav.nearest_main(px + 15.0, py))
+                self.drop_stage[self.drop_target] = st
+            return st, 3.0, "DROPWAIT"
+        c = nav.nearest_main(px, py)
+        return nav.center(c), d.get("radius", 8.0) * 0.4, "DROP"
 
     # ---------- aiming / firing
     def aim_at(self, me, pos, vel, zoff, speed, k=1.0):
@@ -581,6 +761,26 @@ class Bot:
                 self.fight_goal, self.fight_mode = g, "FIELD"
                 return
 
+        # pick the fight: a lone enemy, nobody else on us, we're healthy -> close to our weapon's range
+        if HUNT and m["kind"] == "mech" and hp_frac > HUNT_HP:
+            n_visible = sum(1 for o in self._obs_mechs if o["kind"] == "mech")
+            others_on_us = any(i != m["id"] and t - at < 4.0 for i, at in self.attackers.items())
+            # anyone else seen/heard near us lately (squad reinforcements)? sounds near the target are its own
+            for key, (et, qx, qy) in self.enemies.items():
+                if key == m["id"] or t - et > 10.0 or math.hypot(qx - x, qy - y) > 150.0:
+                    continue
+                if isinstance(key, tuple) and math.hypot(qx - ex, qy - ey) < 40.0:
+                    continue
+                others_on_us = True
+                break
+            pref = HUNT_RANGE.get(self.style, 70.0)
+            capturing = t - self.capturers.get(m["id"], -1e9) < 3.0  # about to be healed by a drop
+            if n_visible == 1 and not others_on_us and not capturing and d > pref + 10.0:
+                a = math.atan2(y - ey, x - ex)
+                px, py = self.clamp_safe(ex + pref * math.cos(a), ey + pref * math.sin(a))
+                self.fight_goal, self.fight_mode = self.nav.center(self.nav.nearest_main(px, py)), "HUNT"
+                return
+
         if WEIGH_THREATS and self.active:
             def eye(o):
                 return (o["pos"][0], o["pos"][1], o["pos"][2] + (3.0 if o["kind"] == "npc" else 8.0))
@@ -733,6 +933,11 @@ class Bot:
         self.aim.observe(t, obs["mechs"])
         self.style = self.loadout_style(weapons)
         self.mark_seen(x, y)
+        for dr in obs.get("drops", []):
+            if dr.get("holder") is not None and dr["holder"] != me["id"]:
+                self.capturers[dr["holder"]] = t
+        if SOUNDS:
+            self.hear(obs, x, y, t)
         fighting = t - self.threat_t < 3.0
         late = obs["alive"] <= 5 or zone["next_radius"] <= 70
         self.update_escape(me, mechs, t, t_start)
@@ -778,6 +983,12 @@ class Bot:
             foes = mechs + [m for m in obs["mechs"] if m["kind"] == "npc"
                             and t - self.npc_attackers.get(m["id"], -1e9) < 4.0]
         fight_m = self.pick_target(me, foes, t) if mechs else None
+        contesting = DROPS and CONTEST and self.nav is not None and self.escape is None and self._contest(obs, me, t)
+        if contesting and self.contest[3] is not None:
+            # sniping/contesting a capture: the capturer is the target, whoever else scores higher
+            forced = next((m for m in mechs if m["id"] == self.contest[3]), None)
+            if forced is not None:
+                fight_m = forced
         if fight_m is not None and self.escape is None:
             self.update_fight_goal(me, fight_m, t, t_start)
         elif not mechs:
@@ -789,11 +1000,21 @@ class Bot:
             dgoal = math.hypot(self.escape["goal"][0] - x, self.escape["goal"][1] - y)
             stop_r = 1.5
             mode = "ESCAPE"
+        elif contesting:
+            g = self.contest[0]
+            self.set_goal(g, x, y)
+            dgoal = math.hypot(g[0] - x, g[1] - y)
+            mode = self.contest[2]
+            stop_r = 3.5 if mode == "SNIPE" else 2.5
         elif self.fight_goal is not None:
             self.set_goal(self.fight_goal, x, y)
             dgoal = math.hypot(self.fight_goal[0] - x, self.fight_goal[1] - y)
             stop_r = 3.0
             mode = self.fight_mode
+        elif DROPS and self.nav is not None and t - self.threat_t > 3.0 and self._drop(obs, me, t):
+            g, stop_r, mode = self._drop_now
+            self.set_goal(g, x, y)
+            dgoal = math.hypot(g[0] - x, g[1] - y)
         elif target is None and EXPLORE and safe and t < EXPLORE_UNTIL and self.nav is not None and \
                 self._explore(x, y, zone, t):
             gx, gy = self.explore_goal
@@ -883,7 +1104,8 @@ class Bot:
         # ---- stuck detection
         self.hist.append((t, x, y))
         jump = False
-        boost = not me["in_zone"] or (self.escape is not None and me["energy"] > 30) or extra_boost
+        boost = not me["in_zone"] or (self.escape is not None and me["energy"] > 30) or extra_boost or \
+            (mode == "CONTEST" and dgoal > 6.0 and me["energy"] > 40)
         if self.unstick > 0:
             self.unstick -= 1
             boost = True
@@ -910,6 +1132,10 @@ class Bot:
             yaw = math.atan2(move[1], move[0])
             if SWEEP and not fighting:
                 yaw += 0.9 * math.sin(t * 1.3)
+        elif mode == "cover" and self.cover_face is not None:
+            yaw = self.cover_face  # parked in a corner: watch the open side, that's where they come from
+            if SWEEP and not fighting:
+                yaw += 0.7 * math.sin(t * 0.5)
         else:
             yaw = math.atan2(zone["center"][1] - y, zone["center"][0] - x)
             if SWEEP and not fighting:
@@ -919,6 +1145,11 @@ class Bot:
         if FACE_ATTACKER and not mechs and t - self.dmg_bearing[0] < 3.0:
             yaw = self.dmg_bearing[1]
             pitch = 0.15  # roofs / jets are above us more often than below
+        # heard something telling (footsteps, a laser charging, gunfire not far): look that way first
+        elif SOUNDS and not mechs and self.sound_face is not None and t - self.sound_face[0] < SOUND_FACE_S \
+                and self.sound_face[2] > 0.6:
+            yaw = self.sound_face[1]
+            pitch = 0.05
         act.update(move=move, boost=boost, jump=jump, aim=[yaw, pitch])
 
         # ---- take weapons in reach (swap rules in loot.weapon_take)

@@ -259,6 +259,41 @@ class Nav:
                 return best
         return c0
 
+    def exposure(self, c, rays=12, reach=60.0):
+        """How open cell c is: of `rays` horizontal directions from eye height, how many see `reach` m
+        without hitting a building or terrain. Returns (open count, yaw to face = mean open direction or None)."""
+        cx, cy = self.center(c)
+        z0 = self.surf[c] + 8.0
+        ftop, fbase, SW, SH, ox, oy, sub = self.ftop, self.fbase, self.SW, self.SH, self.ox, self.oy, self.sub
+        hm, tnx, tny, tx0, ty0, ts, hsc = self.hm, self.tnx, self.tny, self.tx0, self.ty0, self.ts, self.hsc
+        n_open, sx, sy = 0, 0.0, 0.0
+        for k in range(rays):
+            a = 2 * math.pi * k / rays
+            dx, dy = math.cos(a), math.sin(a)
+            blocked = False
+            d = 2.0
+            while d <= reach:
+                px, py = cx + dx * d, cy + dy * d
+                i, j = int((px - ox) / sub), int((py - oy) / sub)
+                if not (0 <= i < SW and 0 <= j < SH):
+                    blocked = True  # map edge
+                    break
+                fc = j * SW + i
+                if fbase[fc] <= z0 <= ftop[fc]:
+                    blocked = True
+                    break
+                vi, vj = int((px - tx0) / ts + 0.5), int((py - ty0) / ts + 0.5)
+                if 0 <= vi < tnx and 0 <= vj < tny and hm[vj * tnx + vi] * hsc > z0:
+                    blocked = True
+                    break
+                d += 2.0
+            if not blocked:
+                n_open += 1
+                sx += dx
+                sy += dy
+        face = math.atan2(sy, sx) if n_open else None
+        return n_open, face
+
     safe = None  # (cx, cy, r): hiding/flanking spots must be inside this circle (set by the bot from the zone)
 
     def in_safe(self, c: int) -> bool:
