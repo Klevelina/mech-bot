@@ -83,6 +83,9 @@ class Nav:
         sub = cell / 2.0
         SW, SH = 2 * W, 2 * H
         ox, oy = self.ox, self.oy
+        # fine (half-cell) solid spans for line-of-fire checks: tallest prism per sub-cell, its base and top
+        ftop = array.array("f", [-1e9]) * (SW * SH)
+        fbase = array.array("f", [0.0]) * (SW * SH)
         for p in world["prisms"]:
             pbase, ptop = float(p["base"]), float(p["top"])
             edges = []
@@ -102,10 +105,15 @@ class Nav:
                 xs = sorted(x1 + (y - y1) * k for (x1, y1, k, y2) in edges if (y1 <= y) != (y2 <= y))
                 cj = sj >> 1
                 rowc = cj * W
+                rowf = sj * SW
                 for a, b in zip(xs[0::2], xs[1::2]):
                     si0 = max(0, math.ceil((a - ox) / sub - 0.5))
                     si1 = min(SW - 1, math.floor((b - ox) / sub - 0.5))
                     for si in range(si0, si1 + 1):
+                        fc = rowf + si
+                        if ptop > ftop[fc]:
+                            ftop[fc] = ptop
+                            fbase[fc] = pbase
                         c = rowc + (si >> 1)
                         if pbase > ground[c] + head:
                             continue  # clears our head: walk under it
@@ -202,6 +210,7 @@ class Nav:
                     break
 
         self.surf, self.roof, self.blocked, self.mask, self.extra, self.comp = surf, roof, blocked, mask, extra, comp
+        self.ftop, self.fbase, self.sub, self.SW, self.SH = ftop, fbase, sub, SW, SH
         self.cover = cover
         self.build_s = time.perf_counter() - t0
         _log(f"nav: {W}x{H} cells, {len(sizes)} comps, main={sizes[self.main] if sizes else 0} cells, "
@@ -249,6 +258,61 @@ class Nav:
             if best >= 0:
                 return best
         return c0
+
+    def los(self, ax, ay, az, bx, by, bz, skip=3.0) -> bool:
+        """Line of sight/fire between two 3D points over the grid's surfaces (buildings + terrain).
+        Ignores the first/last `skip` m (the shooter's and target's own cells). Trees are not solids."""
+        dx, dy, dz = bx - ax, by - ay, bz - az
+        d = math.hypot(dx, dy)
+        sub = self.sub
+        n = int(d / sub)
+        if n < 2:
+            return True
+        ftop, fbase, SW, SH, ox, oy = self.ftop, self.fbase, self.SW, self.SH, self.ox, self.oy
+        hm, tnx, tny, tx0, ty0, ts, hsc = self.hm, self.tnx, self.tny, self.tx0, self.ty0, self.ts, self.hsc
+        lo, hi = skip / d, 1.0 - skip / d
+        for k in range(1, n):
+            f = k / n
+            if f < lo or f > hi:
+                continue
+            px, py, pz = ax + dx * f, ay + dy * f, az + dz * f
+            i = int((px - ox) / sub)
+            j = int((py - oy) / sub)
+            if 0 <= i < SW and 0 <= j < SH:
+                fc = j * SW + i
+                if fbase[fc] <= pz <= ftop[fc]:
+                    return False
+            vi = int((px - tx0) / ts + 0.5)
+            vj = int((py - ty0) / ts + 0.5)
+            if 0 <= vi < tnx and 0 <= vj < tny and hm[vj * tnx + vi] * hsc > pz:
+                return False
+        return True
+
+    def hide_cell(self, ex, ey, ez, mx, my, max_r=50.0, deadline=None):
+        """Nearest walkable main-component cell (searching outward from us) that `(ex, ey, ez)` can't see.
+        Checks our top (surface + 8.5 m) against the enemy's eye. Returns a cell or -1."""
+        i0 = int((mx - self.ox) / self.cell)
+        j0 = int((my - self.oy) / self.cell)
+        W, H, comp, main, surf = self.W, self.H, self.comp, self.main, self.surf
+        rmax = int(max_r / self.cell)
+        for r in range(1, rmax + 1):
+            cand = []
+            for dj in range(-r, r + 1):
+                for di in ((-r, r) if abs(dj) != r else range(-r, r + 1)):
+                    i, j = i0 + di, j0 + dj
+                    if 0 <= i < W and 0 <= j < H:
+                        c = j * W + i
+                        if comp[c] == main:
+                            cand.append(c)
+            for n_c, c in enumerate(cand[::2] if r > 6 else cand):
+                cx, cy = self.center(c)
+                if not self.los(ex, ey, ez, cx, cy, surf[c] + 8.5, skip=1.0):
+                    return c
+                if deadline is not None and n_c & 15 == 15 and time.perf_counter() > deadline:
+                    return -1
+            if deadline is not None and time.perf_counter() > deadline:
+                return -1
+        return -1
 
     def penalize(self, x: float, y: float, radius_cells: int = 2, amount: float = 25.0) -> None:
         j0, i0 = divmod(self.cell_of(x, y), self.W)
