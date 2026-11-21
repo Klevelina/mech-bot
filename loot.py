@@ -1,0 +1,146 @@
+"""Loot: remember items we have seen, pick what to go for, weapon swap rules, upgrade picks."""
+import math
+
+# What a found item is worth before distance (rough "cubes" scale).
+VALUE = {"cube": 3.0, "crate": 2.5, "npc": 4.0}
+# Upgrade picks, first available wins. Plating/armor/nanites keep us alive; the rest are fillers.
+UPGRADE_ORDER = ["plating", "armor", "nanites", "sensors",
+                 "lightning_efficiency", "laser_charge", "laser_damage", "lightning_range",
+                 "gun_damage", "gun_rate", "gun_mag", "gun_velocity",
+                 "servos", "capacitor", "reactor", "gyros", "jets"]
+SPECIALS = ("laser", "lightning")
+
+
+def pick_upgrade(offer):
+    ids = [c["id"] for c in offer["choices"]]
+    for want in UPGRADE_ORDER:
+        if want in ids:
+            return ids.index(want)
+    return 0
+
+
+def weapon_take(kind, weapons, late, fighting):
+    """Should we take a `kind` pickup? Returns None (no), or the `drop` slot (None = an empty slot is free).
+
+    Rules: never mortar or a second gun; empty slot -> take; mortar in slot 1 -> swap it;
+    swap the other special toward the stage's preference (laser early, lightning late);
+    late game also replace the gun with the second special. Never swap during a fight."""
+    if kind not in SPECIALS:
+        return None
+    kinds = [w["kind"] if w else None for w in weapons]
+    if kind in kinds:
+        return None
+    if any(w and w.get("charge", 0) > 0 for w in weapons):
+        return None  # can't swap while a laser charges
+    if None in kinds:
+        return "empty"
+    if fighting:
+        return None
+    s0, s1 = kinds[0], kinds[1]
+    if s1 == "mortar":
+        return 1
+    if s0 == "mortar":
+        return 0
+    pref = "lightning" if late else "laser"
+    if late and s0 == "gun":
+        return 0  # gun out, second special in
+    if kind == pref and s1 in SPECIALS and s1 != pref:
+        return 1
+    return None
+
+
+class Memory:
+    """Items seen so far. Crates, cubes and pickups don't move; NPCs wander near home."""
+
+    def __init__(self, nav, cfg):
+        self.nav = nav
+        self.items = {}   # id -> dict(kind, x, y, z, seen, wkind, hp)
+        self.banned = set()
+        self.near_range = cfg["vision"].get("near_range", 45)
+
+    def update(self, obs):
+        t = obs["t"]
+        for c in obs["cubes"]:
+            self._see(c, "cube", t)
+        for c in obs["crates"]:
+            self._see(c, "crate", t, hp=c.get("hp"))
+        for p in obs["pickups"]:
+            self._see(p, "pickup", t, wkind=p["kind"])
+        for m in obs["mechs"]:
+            if m["kind"] == "npc":
+                self._see(m, "npc", t, hp=m.get("hp"))
+        for e in obs["events"]:
+            if e["type"] in ("took",):
+                self.items.pop(e["id"], None)
+            elif e["type"] == "dropped":
+                self.banned.add(e["id"])  # don't pick back up what we just dropped
+        # forget things that should be visible but aren't (close by), and stale ones
+        x, y = obs["self"]["pos"][0], obs["self"]["pos"][1]
+        gone = []
+        for i, it in self.items.items():
+            age = t - it["seen"]
+            if age > 1.0 and (it["x"] - x) ** 2 + (it["y"] - y) ** 2 < 20.0 ** 2:
+                gone.append(i)
+            elif it["kind"] == "npc" and age > 15:
+                gone.append(i)
+            elif age > 120:
+                gone.append(i)
+        for i in gone:
+            del self.items[i]
+
+    def _see(self, o, kind, t, **extra):
+        x, y, z = o["pos"]
+        it = self.items.get(o["id"])
+        if it is None:
+            it = {"kind": kind, "cell": None, "ok": None}
+            self.items[o["id"]] = it
+        it.update(x=x, y=y, z=z, seen=t, **extra)
+
+    def reachable_cell(self, it):
+        """Main-component cell next to the item, or -1 (roof / unreachable)."""
+        nav = self.nav
+        if it["ok"] is None or it["kind"] == "npc":
+            ok = False
+            cell = -1
+            if nav is not None:
+                gz = nav.ground_z(it["x"], it["y"])
+                if it["z"] < gz + 3.0:  # not on a roof
+                    c = nav.nearest_main(it["x"], it["y"], max_r=4)
+                    if nav.comp[c] == nav.main:
+                        cx, cy = nav.center(c)
+                        if math.hypot(cx - it["x"], cy - it["y"]) < 6.0:
+                            ok, cell = True, c
+            it["ok"], it["cell"] = ok, cell
+        return it["cell"] if it["ok"] else -1
+
+    def best_target(self, me, zone, weapons, late, max_dist, danger):
+        """(id, item) worth going for, or (None, None). `danger(x, y)` -> True to skip."""
+        x, y = me["pos"][0], me["pos"][1]
+        nc, nr = zone["next_center"], zone["next_radius"]
+        cc, cr = zone["center"], zone["radius"]
+        best, bs = None, 0.0
+        for i, it in self.items.items():
+            if i in self.banned:
+                continue
+            k = it["kind"]
+            if k == "pickup":
+                d = weapon_take(it["wkind"], weapons, late, False)
+                if d is None:
+                    continue
+                v = 5.0 if d == "empty" else 3.0
+            else:
+                v = VALUE[k]
+            ix, iy = it["x"], it["y"]
+            dist = math.hypot(ix - x, iy - y)
+            if dist > max_dist:
+                continue
+            if math.hypot(ix - nc[0], iy - nc[1]) > nr - 5 or math.hypot(ix - cc[0], iy - cc[1]) > cr - 5:
+                continue
+            if danger(ix, iy):
+                continue
+            if self.reachable_cell(it) < 0:
+                continue
+            s = v / (dist + 30.0)
+            if s > bs:
+                best, bs = i, s
+        return (best, self.items[best]) if best is not None else (None, None)
