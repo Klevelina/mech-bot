@@ -259,14 +259,16 @@ class Nav:
                 return best
         return c0
 
-    def exposure(self, c, rays=12, reach=60.0):
+    def exposure(self, c, rays=12, reach=60.0, far=200.0):
         """How open cell c is: of `rays` horizontal directions from eye height, how many see `reach` m
-        without hitting a building or terrain. Returns (open count, yaw to face = mean open direction or None)."""
+        without hitting a building or terrain. Open rays keep going (coarser steps) up to `far` m to measure the view.
+        Returns (open count, yaw of the mean open direction or None, longest view m, yaw of the longest view)."""
         cx, cy = self.center(c)
         z0 = self.surf[c] + 8.0
         ftop, fbase, SW, SH, ox, oy, sub = self.ftop, self.fbase, self.SW, self.SH, self.ox, self.oy, self.sub
         hm, tnx, tny, tx0, ty0, ts, hsc = self.hm, self.tnx, self.tny, self.tx0, self.ty0, self.ts, self.hsc
         n_open, sx, sy = 0, 0.0, 0.0
+        best_view, best_yaw = 0.0, None
         for k in range(rays):
             a = 2 * math.pi * k / rays
             dx, dy = math.cos(a), math.sin(a)
@@ -291,8 +293,23 @@ class Nav:
                 n_open += 1
                 sx += dx
                 sy += dy
+                # how far does this open direction see? (overwatch: long views to spot attackers early)
+                while d <= far:
+                    px, py = cx + dx * d, cy + dy * d
+                    i, j = int((px - ox) / sub), int((py - oy) / sub)
+                    if not (0 <= i < SW and 0 <= j < SH):
+                        break
+                    fc = j * SW + i
+                    if fbase[fc] <= z0 <= ftop[fc]:
+                        break
+                    vi, vj = int((px - tx0) / ts + 0.5), int((py - ty0) / ts + 0.5)
+                    if 0 <= vi < tnx and 0 <= vj < tny and hm[vj * tnx + vi] * hsc > z0:
+                        break
+                    d += 4.0
+                if d > best_view:
+                    best_view, best_yaw = min(d, far), a
         face = math.atan2(sy, sx) if n_open else None
-        return n_open, face
+        return n_open, face, best_view, best_yaw
 
     safe = None  # (cx, cy, r): hiding/flanking spots must be inside this circle (set by the bot from the zone)
 

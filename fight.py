@@ -323,7 +323,7 @@ class FightMixin:
         # closing in on us: don't let it walk up unpunished
         x, y = me["pos"][0], me["pos"][1]
         ex, ey = m["pos"][0], m["pos"][1]
-        if d < 50.0:
+        if d < LATE_FIRE_R:
             return True
         to_us = math.atan2(y - ey, x - ex)
         closing = (m["vel"][0] * (x - ex) + m["vel"][1] * (y - ey)) / max(d, 1.0) > 2.0
@@ -381,6 +381,36 @@ class FightMixin:
         px, py = self.clamp_safe(pos[0] + r * math.cos(a), pos[1] + r * math.sin(a))
         return self.nav.center(self.nav.nearest_main(px, py))
 
+    def between_goal(self, me, t_start):
+        """If two visible enemies are >120 deg apart around us, a spot out of their line: hidden from both if
+        one is close, else 30 m sideways from the line joining them. None if we're not between two."""
+        x, y = me["pos"][0], me["pos"][1]
+        vis = [o for o in self._obs_mechs if o["kind"] == "mech"]
+        pair = None
+        for i in range(len(vis)):
+            for j in range(i + 1, len(vis)):
+                a1 = math.atan2(vis[i]["pos"][1] - y, vis[i]["pos"][0] - x)
+                a2 = math.atan2(vis[j]["pos"][1] - y, vis[j]["pos"][0] - x)
+                if abs(wrap(a1 - a2)) > 2.1:
+                    pair = (vis[i], vis[j])
+                    break
+            if pair:
+                break
+        if pair is None:
+            return None
+        a, b = pair
+        c = self.nav.flank_cell([(o["pos"][0], o["pos"][1], o["pos"][2] + 8.0) for o in pair], None, x, y, 30.0,
+                                t_start + 0.008)
+        if c >= 0:
+            return self.nav.center(c)
+        lx, ly = b["pos"][0] - a["pos"][0], b["pos"][1] - a["pos"][1]
+        ln = math.hypot(lx, ly) or 1.0
+        nx, ny = -ly / ln, lx / ln
+        if (x - a["pos"][0]) * nx + (y - a["pos"][1]) * ny < 0:
+            nx, ny = -nx, -ny
+        px, py = self.clamp_safe(x + 30.0 * nx, y + 30.0 * ny)
+        return self.nav.center(self.nav.nearest_main(px, py))
+
     def update_fight_goal(self, me, m, t, t_start):
         """Where to stand against target m, by our loadout. None = keep the normal goal (cover)."""
         if not PLAYSTYLE or self.nav is None or m is None:
@@ -403,18 +433,37 @@ class FightMixin:
                 self.fight_goal, self.fight_mode = g, "FIELD"
                 return
 
+        # never stand between two visible enemies (>120 deg apart: one of them is shooting our back)
+        if AVOID_BETWEEN and m["kind"] == "mech":
+            g = self.between_goal(me, t_start)
+            if g is not None:
+                self.fight_goal, self.fight_mode = g, "UNPINCH"
+                return
+
         # pick the fight: a lone enemy, nobody else on us, we're healthy -> close to our weapon's range
         if HUNT and m["kind"] == "mech" and hp_frac > HUNT_HP and not self.late_zone:
             n_visible = sum(1 for o in self._obs_mechs if o["kind"] == "mech")
-            others_on_us = any(i != m["id"] and t - at < 4.0 for i, at in self.attackers.items())
-            # anyone else seen/heard near us lately (squad reinforcements)? sounds near the target are its own
+            vis_ids = [o["id"] for o in self._obs_mechs if o["kind"] == "mech"]
+            # with lightning, a visible pair is fair game too (the arc chains between them)
+            pair_ok = False
+            if HUNT_PAIR_LIGHTNING and self.style == "lightning" and n_visible == 2 and hp_frac > HUNT_PAIR_HP:
+                p1, p2 = [o["pos"] for o in self._obs_mechs if o["kind"] == "mech"]
+                chain = self.wcfg.get("lightning", {}).get("chain_range", 14.0)
+                pair_ok = math.hypot(p1[0] - p2[0], p1[1] - p2[1]) <= chain  # close enough for the arc to jump
+            allowed = set(vis_ids) if pair_ok else {m["id"]}
+            others_on_us = any(i not in allowed and t - at < 4.0 for i, at in self.attackers.items())
+            # anyone else seen/heard near us lately (squad reinforcements)? sounds near the targets are their own
             for key, (et, qx, qy) in self.enemies.items():
-                if key == m["id"] or t - et > 10.0 or math.hypot(qx - x, qy - y) > 150.0:
+                if key in allowed or t - et > 10.0 or math.hypot(qx - x, qy - y) > 150.0:
                     continue
-                if isinstance(key, tuple) and math.hypot(qx - ex, qy - ey) < 40.0:
+                if isinstance(key, tuple) and any(
+                        math.hypot(qx - o["pos"][0], qy - o["pos"][1]) < 40.0
+                        for o in self._obs_mechs if o["id"] in allowed):
                     continue
                 others_on_us = True
                 break
+            if pair_ok:
+                n_visible = 1  # treat the pair as one fight
             pref = HUNT_RANGE.get(self.style, 70.0)
             capturing = t - self.capturers.get(m["id"], -1e9) < 3.0  # about to be healed by a drop
             if n_visible == 1 and not others_on_us and not capturing and d > pref + 10.0:
