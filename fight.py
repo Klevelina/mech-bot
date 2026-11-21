@@ -16,10 +16,6 @@ class FightMixin:
         `k` scales the horizontal lead (learned). Returns ([yaw, pitch], horizontal distance)."""
         mx, my, mz = me["pos"]
         mz += me["stats"].get("muzzle_height", 7)
-        lat = AIM_LATENCY
-        if lat and me.get("vel"):
-            # the shot leaves after the server applies our answer: from where our muzzle will be by then
-            mx, my = mx + me["vel"][0] * lat, my + me["vel"][1] * lat
         px, py, pz = pos
         vx, vy, vz = vel if vel else (0.0, 0.0, 0.0)
         vx, vy = vx * k, vy * k
@@ -31,12 +27,10 @@ class FightMixin:
                 g = self.gravity
         tt = 0.0
         for _ in range(3):
-            te = tt + lat if speed else tt  # the target keeps moving during our answer's delay too
-            ax, ay = px + vx * te, py + vy * te
-            az = max(pz + vz * te - 0.5 * g * te * te, gz) + zoff
+            ax, ay = px + vx * tt, py + vy * tt
+            az = max(pz + vz * tt - 0.5 * g * tt * tt, gz) + zoff
             d = math.sqrt((ax - mx) ** 2 + (ay - my) ** 2 + (az - mz) ** 2)
-            # a shot starts 3 m out along the aim (protocol: radius + 0.5)
-            tt = max(0.0, d - (3.0 if lat else 0.0)) / speed if speed else 0.0
+            tt = d / speed if speed else 0.0
         h = math.hypot(ax - mx, ay - my)
         st = me["stats"]
         pitch = max(st.get("min_pitch", -0.7), min(st.get("max_pitch", 1.3), math.atan2(az - mz, h)))
@@ -66,21 +60,6 @@ class FightMixin:
                 # don't start a charge with a lightning carrier close by: its arc would cancel it
                 out[i] = dist < st.get("range", 280) and w.get("cooldown", 0) <= 0.05 and charge < full \
                     and (charge > 0 or (err < tol * 3 and not (PLAYBOOK and getattr(self, "lit_near", False))))
-                if LASER_HOLD_AIM and charge >= full - 0.05 and dist < st.get("range", 280):
-                    # charged: let go only with the beam on target (sideways within 0.9 x its half-width);
-                    # off target, keep holding (a full charge goes off on its own after hold_s anyway)
-                    on = abs(wrap(cur[0] - aim[0])) < tol * 0.9 and abs(cur[1] - aim[1]) < tol * 1.6
-                    out[i] = not on
-        return out
-
-    def laser_precharge(self, me):
-        """LASER_PRECHARGE: fire flags that keep our laser charged while the target is out of our line of fire, so
-        a full beam is ready the moment it shows (stops short of the automatic release after hold_s)."""
-        out = [False, False]
-        for i, w in enumerate(me["weapons"]):
-            if w and w["kind"] == "laser" and w.get("cooldown", 0) <= 0.05:
-                st = w["stats"]
-                out[i] = w.get("charge", 0) < st.get("charge", 0.75) + st.get("hold_s", 2.0) - 0.35
         return out
 
     def hit_zoff(self, me, m):
@@ -307,7 +286,14 @@ class FightMixin:
             return None
         eyes = [(o["pos"][0], o["pos"][1], o["pos"][2] + 8.0) for o in in_sight] or \
             [(m["pos"][0], m["pos"][1], m["pos"][2] + 8.0)]
-        c = self.nav.flank_cell(eyes, None, x, y, ALLIN_COVER_R, t_start + 0.010)
+        if RETREAT_WALK:
+            # nearest hidden spot by walking distance, out of sight of up to 4 enemies (head and middle)
+            near4 = sorted(in_sight, key=lambda o: math.hypot(o["pos"][0] - x, o["pos"][1] - y))[:4] or [m]
+            weyes = [(o["pos"][0], o["pos"][1], o["pos"][2] + 8.0) for o in near4]
+            c = self.nav.walk_cover(weyes, x, y, me["stats"].get("height", 9.0), deadline=t_start + 0.014)
+            if c >= 0:
+                return self.nav.center(c)
+        c = self.nav.flank_cell(eyes, None, x, y, ALLIN_COVER_R, t_start + 0.018)
         if c >= 0:
             return self.nav.center(c)
         return self.away_goal(me, m["pos"][0], m["pos"][1], 30.0, t_start)
