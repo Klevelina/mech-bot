@@ -20,9 +20,10 @@ from drops import DropsMixin
 from fight import FightMixin
 from evade import EvadeMixin
 from artillery import ArtilleryMixin
+from stealth import StealthMixin
 
 
-class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryMixin):
+class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryMixin, StealthMixin):
     name = "mech-fight"
 
     def __init__(self, hello: mf.Hello):
@@ -189,6 +190,7 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         if SOUNDS:
             self.hear(obs, x, y, t)
         fighting = t - self.threat_t < 3.0
+        self._me_xy = (x, y)
         # recovery: after a fight, below RECOVER_HP -> no shooting things (it resets the 5 s regen timer),
         # no exploring/hunting; pick up only what needs no shooting, close by; hold cover until healed
         hp_frac = me["hp"] / max(1.0, me["max_hp"])
@@ -277,12 +279,20 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         elif not mechs:
             self.fight_goal = None
             self.fight_goal_id = None
+        # surrounded: vanish (break every line of sight, go silent, heal, see whether they lose us)
+        vanish_goal = self.update_vanish(me, obs["mechs"], fight_m, t, t_start) if self.escape is None else None
+        hidden = vanish_goal is not None and self.vanish_hidden()
         safe = t - self.threat_t > SAFE_AFTER
         if self.escape is not None:
             self.set_goal(self.escape["goal"], x, y)
             dgoal = math.hypot(self.escape["goal"][0] - x, self.escape["goal"][1] - y)
             stop_r = 1.5
             mode = "ESCAPE"
+        elif vanish_goal is not None:
+            self.set_goal(vanish_goal, x, y)
+            dgoal = math.hypot(vanish_goal[0] - x, vanish_goal[1] - y)
+            stop_r = 1.5
+            mode = "HIDDEN" if hidden else "VANISH"
         elif contesting:
             g = self.contest[0]
             self.set_goal(g, x, y)
@@ -307,12 +317,6 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             g, stop_r, mode = self._drop_now
             self.set_goal(g, x, y)
             dgoal = math.hypot(g[0] - x, g[1] - y)
-        elif BLITZ and self.nav is not None and not mechs and self.seek_goal(me, t) is not None:
-            g = self.seek_goal(me, t)  # early blitz: go find the hunter we lost instead of looting
-            self.set_goal(g, x, y)
-            dgoal = math.hypot(g[0] - x, g[1] - y)
-            stop_r = 4.0
-            mode = "SEEK"
         elif target is None and EXPLORE and safe and not self.recovering and t < EXPLORE_UNTIL and                 self.nav is not None and \
                 self._explore(x, y, zone, t):
             gx, gy = self.explore_goal
@@ -404,9 +408,11 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         jump = False
         boost = not me["in_zone"] or (self.escape is not None and me["energy"] > 30) or extra_boost or \
             (mode == "CONTEST" and dgoal > 6.0 and me["energy"] > 40) or             (mode == "FINISH" and dgoal > 8.0 and me["energy"] > 30)
-        if BLITZ and self.blitz_on() and mode in ("HUNT", "SEEK", "FINISH") and dgoal > 15.0 and \
-                me["energy"] > BLITZ_BOOST_E:
-            boost = True  # blitz: get there first
+        if mode == "VANISH" and dgoal > 3.0 and me["energy"] > 20:
+            boost = True  # they see us anyway: get out of sight fast
+        if mode == "HIDDEN":
+            boost = False  # silent: no boost / jet noise ...
+            move = [move[0] * VANISH_WALK, move[1] * VANISH_WALK]  # ... and no footsteps (under 5 m/s)
         if mode == "DISENGAGE" and dgoal > 3.0 and me["energy"] > 30:
             boost = True  # reach the hiding spot fast
         if LOOT_BOOST and mode in ("cube", "pickup", "crate", "npc", "pile", "explore") and dgoal > 15.0 and \
@@ -565,6 +571,10 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
                             act["fire"] = [ok and i == slot for i in range(2)]
                             break
 
+        # ---- hidden: hold fire (a shot is heard 320 m away); nobody can see us, or we wouldn't be hidden
+        if hidden:
+            act["fire"] = [False, False]
+
         # ---- reload: when calm, during a pause in a fight, or before picking one (never while landing shots)
         g = next((w for w in weapons if w and w["kind"] == "gun"), None)
         if g and g.get("reload", 0) == 0:
@@ -573,6 +583,9 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             calm = not mechs and shoot is None and ammo < mag / 2
             pause = RELOAD_IN_PAUSE and mechs and no_shot and ammo < mag * RELOAD_PAUSE_FRAC
             topup = hiding_laser and (not mechs or no_shot) and ammo < mag * LASER_RELOAD_FRAC
+            if hidden and any(math.hypot(ex - x, ey - y) < 60.0 for _, ex, ey, _ in self._known_enemies(obs["mechs"], t)):
+                calm = pause = topup = False  # a reload is heard within 60 m
+                self.want_reload = False
             if calm or pause or self.want_reload or topup:
                 act["reload"] = True
         self.want_reload = False
@@ -595,7 +608,10 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         """Practice: house bots are a squad that never fights itself, so before the zone gets deadly every death is
         one of our kills. More deaths than our kills (for SITUATION_CONFIRM_S, in case a kill event lags) means
         bots are killing each other: a free-for-all against other players' bots. Once "ffa", it stays."""
-        self.our_kills += sum(1 for e in obs["events"] if e["type"] == "kill")
+        k = sum(1 for e in obs["events"] if e["type"] == "kill")
+        if k:
+            self.last_kill_t = t
+        self.our_kills += k
         if SITUATION and self.situation == "squad":
             dead = self.cfg["match"].get("mechs", 16) - obs["alive"]
             if dead > self.our_kills and t < SITUATION_UNTIL:

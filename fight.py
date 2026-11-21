@@ -422,29 +422,6 @@ class FightMixin:
         hp = m.get("hp") or 1400.0
         return hp / self.our_dps(me, m, d, True) < LATE_QUICK_KILL_S
 
-    def blitz_on(self):
-        """BLITZ: squad match, early phase (the first hunters are the easy bots), not healing."""
-        return BLITZ and getattr(self, "situation", "") == "squad" and getattr(self, "phase", "") == "early" \
-            and not getattr(self, "recovering", False)
-
-    def seek_goal(self, me, t):
-        """BLITZ, nobody in sight: the last known spot of the most recently seen hunter, or None."""
-        if not self.blitz_on() or me["hp"] / max(1.0, me["max_hp"]) < BLITZ_SEEK_HP:
-            return None
-        x, y = me["pos"][0], me["pos"][1]
-        best = None
-        for i, (et, pos, _) in self.epos.items():
-            if i >= 100 or t - et > BLITZ_SEEK_S:
-                continue
-            if math.hypot(pos[0] - x, pos[1] - y) < 15.0:
-                continue  # we're there and it's not: it moved on
-            if best is None or et > best[0]:
-                best = (et, i, pos)
-        if best is None:
-            return None
-        px, py = self.clamp_safe(best[2][0], best[2][1])
-        return self.nav.center(self.nav.nearest_main(px, py))
-
     def _finish(self, me, mechs, t):
         self.finish_now = self.finish_goal(me, mechs, t)
         return self.finish_now is not None
@@ -469,14 +446,12 @@ class FightMixin:
                     it["kind"] == "pile" and math.hypot(it["x"] - ex, it["y"] - ey) < 30.0
                     for it in self.mem.items.values())
                 fin_hp = AGGRO_FINISH_HP if (EARLY_AGGRO and getattr(self, "phase", "") == "early") else FINISH_HP
-                if self.blitz_on():
-                    fin_hp = BLITZ_FINISH_HP
                 if frac >= fin_hp and not near_pile:
                     continue
                 d = math.hypot(ex - x, ey - y) or 1.0
                 leaving = (m["vel"][0] * (ex - x) + m["vel"][1] * (ey - y)) / d > 1.0
                 if leaving or not self.can_hit(me, m) or near_pile:
-                    self.finish = [m["id"], t + (BLITZ_FINISH_S if self.blitz_on() else FINISH_S), list(m["pos"]), frac]
+                    self.finish = [m["id"], t + FINISH_S, list(m["pos"]), frac]
                     break
         if self.finish is None:
             return None
@@ -491,7 +466,7 @@ class FightMixin:
                 self.finish = None  # it healed (drop?): not a quick kill any more
                 return None
             pos = self.finish[2] = list(m["pos"])
-            until = self.finish[1] = t + (BLITZ_FINISH_S if self.blitz_on() else FINISH_S)
+            until = self.finish[1] = t + FINISH_S
             self.finish_m = m
         if t > until:
             self.finish = None
@@ -510,11 +485,8 @@ class FightMixin:
         if not PLAYSTYLE or self.nav is None or m is None:
             self.fight_goal = None
             return
-        n_vis = sum(1 for o in self._obs_mechs if o["kind"] == "mech")
-        more = MULTI_EARLY and n_vis > getattr(self, "_fg_nvis", 0)  # another enemy just showed up: re-decide now
-        self._fg_nvis = n_vis
-        if t - self.fight_goal_t < 1.0 and m["id"] == self.fight_goal_id and not more:
-            return  # same target: refresh once a second; new target or a new enemy in sight: right away
+        if t - self.fight_goal_t < 1.0 and m["id"] == self.fight_goal_id:
+            return  # same target: refresh once a second; new target: right away
         self.fight_goal_t = t
         self.fight_goal_id = m["id"]
         x, y = me["pos"][0], me["pos"][1]
@@ -532,7 +504,6 @@ class FightMixin:
 
         # pick the fight: a lone enemy, nobody else on us, we're healthy -> close to our weapon's range
         aggro = EARLY_AGGRO and getattr(self, "phase", "") == "early"
-        blitz = self.blitz_on()
         if EARLY_AGGRO:
             # early: pick off weaker enemies; after that, never go looking for fights (hide and heal instead)
             hunt_ok = aggro and hp_frac > AGGRO_HP and self.weaker(me, m)
@@ -540,8 +511,6 @@ class FightMixin:
             hunt_ok = False  # healing between hunters: let the next one come to us, don't go looking
         else:
             hunt_ok = hp_frac > HUNT_HP
-        if blitz:
-            hunt_ok = hp_frac > BLITZ_HP  # early blitz: go at the lone hunter
         if HUNT and m["kind"] == "mech" and hunt_ok and not self.late_zone:
             n_visible = sum(1 for o in self._obs_mechs if o["kind"] == "mech")
             others_on_us = any(i != m["id"] and t - at < 4.0 for i, at in self.attackers.items())
@@ -558,7 +527,8 @@ class FightMixin:
                 lo, hi = band(our_role(me["weapons"]), m.get("weapons"))
                 pref = max(15.0, (lo + hi) / 2.0)
             capturing = t - self.capturers.get(m["id"], -1e9) < 3.0  # about to be healed by a drop
-            winning = not FIGHT_ODDS or self.fight_odds(me, m, t, at=pref) >= (BLITZ_WIN_R if blitz else FIGHT_WIN_R)
+            unaware = VANISH and self.is_unaware(m, t)  # lost us after a vanish, back to us: ambush it
+            winning = not FIGHT_ODDS or self.fight_odds(me, m, t, at=pref) >= (UNAWARE_WIN_R if unaware else FIGHT_WIN_R)
             if n_visible == 1 and not others_on_us and not capturing and d > pref + 10.0 and winning:
                 # low on ammo (or reloading): reload first, then go in
                 g = next((w for w in me["weapons"] if w and w["kind"] == "gun"), None)
@@ -600,33 +570,15 @@ class FightMixin:
                 if c >= 0:
                     self.fight_goal, self.fight_mode = self.nav.center(c), "HIDE"
                     return
-            # "others" to hide from: foes shooting us, and (MULTI_EARLY) known enemies close by that soon will
-            def coming(o):  # MULTI_EARLY: a known enemy mech close by will be shooting us soon
-                return MULTI_EARLY and o["kind"] == "mech" and \
-                    math.hypot(o["pos"][0] - x, o["pos"][1] - y) < MULTI_R
-            others = [(o, dps) for o, dps in self.active if o["id"] != m["id"] and
-                      ((dps > 0 and (t - self.attackers.get(o["id"], -1e9) < 4.0 or
-                                     t - self.npc_attackers.get(o["id"], -1e9) < 4.0)) or coming(o))]
-            # heard but not seen: footsteps / gunfire near or mid range, away from the enemies we already see
-            heard = []
-            if MULTI_EARLY:
-                seen = [(o["pos"][0], o["pos"][1]) for o in self._obs_mechs if o["kind"] == "mech"]
-                for key, (st, sx, sy) in self.enemies.items():
-                    if isinstance(key, tuple) and t - st < MULTI_SOUND_S and \
-                            all(math.hypot(sx - qx, sy - qy) > 40.0 for qx, qy in seen):
-                        heard.append((sx, sy, self.nav.ground_z(sx, sy) + 8.0))
-            if others or heard:
+            # only foes actually shooting us count as "others" to hide from
+            others = [(o, dps) for o, dps in self.active if o["id"] != m["id"] and dps > 0 and
+                      (t - self.attackers.get(o["id"], -1e9) < 4.0 or t - self.npc_attackers.get(o["id"], -1e9) < 4.0)]
+            if others:
                 zc = m["pos"][2] + (1.75 if m["kind"] == "npc" else 4.5)
-                eyes = [eye(o) for o, _ in others]
-                c = self.nav.flank_cell(eyes + heard[:4], (ex, ey, zc), x, y, 40.0, t_start + 0.010)
-                if c < 0 and heard and others:  # sound positions are rough: try the seen ones alone
-                    c = self.nav.flank_cell(eyes, (ex, ey, zc), x, y, 40.0, t_start + 0.016)
+                c = self.nav.flank_cell([eye(o) for o, _ in others], (ex, ey, zc), x, y, 40.0, t_start + 0.010)
                 if c >= 0:
                     self.fight_goal, self.fight_mode = self.nav.center(c), "FLANK"
                     return
-                if not others:
-                    others = None  # only heard ones: nothing to back away from precisely
-            if others:
                 # no spot does both: if another foe hurts us more than our target does, hide from that one
                 o, odps = max(others, key=lambda od: od[1])
                 tdps = next((dp for f, dp in self.active if f["id"] == m["id"]), 0.0)
