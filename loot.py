@@ -1,7 +1,7 @@
 """Loot: remember items we have seen, pick what to go for, weapon swap rules, upgrade picks."""
 import math
 
-from config import LIGHTNING_FIRST, PLAYBOOK, DROP_GUN_FOR_PAIR, MORTAR_USE, UPGRADE_BY_LOADOUT, \
+from config import DAMAGE_FIRST, LIGHTNING_FIRST, PLAYBOOK, DROP_GUN_FOR_PAIR, MORTAR_USE, UPGRADE_BY_LOADOUT, \
     POWER, POWER_WEAPON_V, POWER_DRONE_V, POWER_R, POWER_MORE, POWER_CRATE_V
 
 # What a found item is worth before distance (rough "cubes" scale).
@@ -29,7 +29,25 @@ UPGRADES_FOR = {
 }
 
 
+# DAMAGE_FIRST: our weapons hit harder / sooner first (special weapon before the gun), survival after
+DAMAGE_FOR = {
+    "gun": ["gun_damage", "gun_rate", "gun_mag", "gun_velocity"],
+    "laser": ["laser_damage", "laser_charge", "laser_pierce", "gun_damage", "gun_rate"],
+    "lightning": ["lightning_efficiency", "lightning_range", "lightning_chain", "gun_damage", "gun_rate"],
+    "hybrid": ["laser_damage", "lightning_efficiency", "laser_charge", "lightning_range", "lightning_chain"],
+    "mortar": ["mortar_reload", "mortar_splash", "gun_damage", "gun_rate", "mortar_velocity"],
+}
+DAMAGE_THEN = ["plating", "armor", "nanites", "gyros", "capacitor", "reactor"]
+
+
 def upgrade_order(weapons):
+    key = _loadout_key(weapons)
+    if DAMAGE_FIRST:
+        return DAMAGE_FOR[key] + DAMAGE_FOR["gun"] + DAMAGE_THEN + UPGRADES_FOR[key] + UPGRADE_ORDER
+    return UPGRADES_FOR[key] + UPGRADE_ORDER
+
+
+def _loadout_key(weapons):
     kinds = {w["kind"] for w in (weapons or []) if w}
     if "laser" in kinds and "lightning" in kinds:
         key = "hybrid"
@@ -41,7 +59,7 @@ def upgrade_order(weapons):
         key = "mortar"
     else:
         key = "gun"
-    return UPGRADES_FOR[key] + UPGRADE_ORDER
+    return key
 
 
 def pick_upgrade(offer, weapons=None):

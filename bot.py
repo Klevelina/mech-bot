@@ -307,6 +307,12 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             g, stop_r, mode = self._drop_now
             self.set_goal(g, x, y)
             dgoal = math.hypot(g[0] - x, g[1] - y)
+        elif BLITZ and self.nav is not None and not mechs and self.seek_goal(me, t) is not None:
+            g = self.seek_goal(me, t)  # early blitz: go find the hunter we lost instead of looting
+            self.set_goal(g, x, y)
+            dgoal = math.hypot(g[0] - x, g[1] - y)
+            stop_r = 4.0
+            mode = "SEEK"
         elif target is None and EXPLORE and safe and not self.recovering and t < EXPLORE_UNTIL and                 self.nav is not None and \
                 self._explore(x, y, zone, t):
             gx, gy = self.explore_goal
@@ -398,6 +404,9 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         jump = False
         boost = not me["in_zone"] or (self.escape is not None and me["energy"] > 30) or extra_boost or \
             (mode == "CONTEST" and dgoal > 6.0 and me["energy"] > 40) or             (mode == "FINISH" and dgoal > 8.0 and me["energy"] > 30)
+        if BLITZ and self.blitz_on() and mode in ("HUNT", "SEEK", "FINISH") and dgoal > 15.0 and \
+                me["energy"] > BLITZ_BOOST_E:
+            boost = True  # blitz: get there first
         if mode == "DISENGAGE" and dgoal > 3.0 and me["energy"] > 30:
             boost = True  # reach the hiding spot fast
         if LOOT_BOOST and mode in ("cube", "pickup", "crate", "npc", "pile", "explore") and dgoal > 15.0 and \
