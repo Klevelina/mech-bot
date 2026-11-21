@@ -15,7 +15,7 @@ FACE_ATTACKER = True   # turn toward where damage comes from when we can't see t
 LEAD = True            # lead gun shots at mechs
 SMART_TARGET = True    # attacker > low HP > back turned > close; else nearest
 ESCAPE_UNHITTABLE = True  # break line of sight from attackers we can't hit back
-NO_HIT_S = 2.5         # ... "can't hit" also means: shooting it this long with no hit landing
+NO_HIT_S = 4.0         # ... "can't hit" also means: shooting it this long with no hit landing
 LEARN_AIM = True       # learn per-enemy lead factor from where targets really went
 HOLD_DODGY = True      # don't spend gun ammo on long shots at targets that change direction a lot
 PLAYSTYLE = True       # move by loadout: gun keeps mid range, laser keeps long range, lightning ambushes
@@ -40,9 +40,9 @@ CONTEST_MIN_HP = 0.5   # ... only above this HP fraction
 CONTEST_MAX_DIST = 80.0  # ... and only this close (less open ground to cross); sniping has no distance limit
 PARK_EXPOSURE = True   # park in corners/alcoves (few open directions) and face the open side
 EXPO_W = 6.0           # m of extra walking we accept per open direction avoided (of 12)
-HUNT = False           # one enemy in sight, nobody else on us, healthy: close to our weapon's range and fight
-HUNT_HP = 0.6          # ... "healthy"
-HUNT_RANGE = {"lightning": 30.0, "laser": 110.0, "gun": 70.0}
+HUNT = True            # one enemy in sight, nobody else on us, healthy: close to our weapon's range and fight
+HUNT_HP = 0.4          # ... "healthy"
+HUNT_RANGE = {"lightning": 30.0, "laser": 110.0, "gun": 50.0}  # gun: ~100% hits within 40 m, 65-98% at 80 m
 SLICE_S = 0.020        # A* time per decision
 
 # sound kind -> how much it says "an enemy mech is there" (x band multiplier). npc_gun/crate/drop/death: ignored
@@ -57,18 +57,16 @@ LIGHTNING_FIRST = True  # prefer lightning pickups/swaps all game (chains throug
 LATE_RADIUS = 70.0     # "late game": next circle this small or smaller
 LATE_GAME = True       # late: no hunting / drop contests; hold fire unless it's a quick kill or they shoot us
 LATE_QUICK_KILL_S = 3.0  # ... "quick kill"
-FINISH = False         # chase a fleeing low-HP enemy for a few seconds (a kill is +1; if it gets away it heals)
-FINISH_HP = 0.25       # ... its HP fraction below this
+FINISH = True          # chase a fleeing low-HP enemy for a few seconds (a kill is +1; if it gets away it heals)
+FINISH_HP = 0.35       # ... its HP fraction below this
 FINISH_MIN_HP = 0.4    # ... and ours above this
-FINISH_S = 4.0         # ... keep going to where we last saw it this long
+FINISH_S = 6.0         # ... keep going to where we last saw it this long
 FINISH_RANGE = {"lightning": 25.0, "laser": 100.0, "gun": 45.0}
 
-# ---- ghost play: survive to the end with max HP (test vs the fighting build)
-TREE_COVER = True      # park under tree crowns too: hidden from viewers beyond 45 m
-COVER_AVOID_ENEMIES = True  # cover spots within 100 m of an enemy seen/heard in the last 15 s cost +80 m
-SILENT = True          # an enemy known within SILENT_R: walk under the 5 m/s step-sound speed (when not urgent)
-SILENT_R = 60.0
-SILENT_FRAC = 0.4      # of walk speed (11.7 * 0.4 = 4.7 m/s)
-GHOST = True           # break contact: seen by 2+, losing the duel, or standing between two enemies -> out of sight
-GHOST_LOSE = 0.8       # "losing": our time to kill it > this x its time to kill us
-CONTEST_OTHERS = False  # snipe/contest someone else's drop capture (holding our own ring still works)
+# ---- aggressive build (kills are what move the practice score)
+HUNT_PAIR_LIGHTNING = True  # with lightning, also hunt 2 visible enemies standing within chain range of each other
+HUNT_PAIR_HP = 0.6     # ... only above this HP fraction (a lone enemy: HUNT_HP)
+LATE_FIRE_R = 80.0     # late game: shoot anything this close (was 50 m)
+AVOID_BETWEEN = True   # never stand between two visible enemies (>120 deg apart): step out of their line
+OVERWATCH = True       # prefer parking spots with a long view (up to 200 m) down an open direction; face it
+OVERWATCH_W = 25.0     # m of extra walking accepted for a 200 m view
