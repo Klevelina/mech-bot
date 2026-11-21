@@ -107,8 +107,6 @@ UPGRADE_BY_LOADOUT = True  # upgrade order depends on what we carry (loot.UPGRAD
 # ---- early picks, then hide and heal: hunt weaker enemies only in the early phase, never after; heal more mid game
 EARLY_AGGRO = True
 AGGRO_HP = 0.5         # early: hunt while our HP is above this (instead of HUNT_HP)
-HUNT_LONE = True       # hunt in every phase (not only early, not only weaker targets): a lone enemy, nobody else
-                       # seen/heard within AGGRO_CLEAR_R in 10 s, our HP above AGGRO_HP, fight odds >= FIGHT_WIN_R
 AGGRO_CLEAR_R = 80.0   # early: hunt only if no other enemy was seen/heard this close to us in 10 s (normally 150 m)
 AGGRO_WEAKER = 0.9     # "weaker" target: its HP at most this x ours, or its back is turned to us
 AGGRO_FINISH_HP = 0.4  # early: chase a fleeing enemy below this HP fraction (normally FINISH_HP)
@@ -121,8 +119,26 @@ FIGHT_LOSE_R = 0.8     # being shot with odds below this: back off out of sight 
 DISENGAGE_R = 35.0     # ... only to a spot hidden from every visible enemy within this many metres (boost-run there);
                        #     none that close: stay and fight (running in the open only gets us shot longer)
 
+# ---- hide from lasers we can't answer: no laser of our own, lasered (or a laser charging on us) from beyond our reach
+LASER_HIDE = True
+LASER_HIDE_MIN = 60.0  # closer than this our gun / lightning can fight it: don't hide
+LASER_HIDE_R = 50.0    # hide only to a spot it can't see within this many metres (none: fight as usual)
+LASER_HOLD_S = 4.0     # stay hidden until this long without a laser hit; on leaving, a cover spot the laser could
+                       # see from where it was is swapped for another one. While hidden: watch its way in, top up
+                       # the gun; if it follows us within LASER_HIDE_MIN with a clear shot, stop hiding and shoot first
+LASER_RELOAD_FRAC = 0.75  # hidden from a laser: reload below this fraction of a magazine
+
 # ---- faster looting
 LOOT_GIVEUP_S = 15.0   # give up on an item after this long (was 40 s)
 LOOT_CRATE_SHOOT_R = 90.0  # start shooting a visible crate this far away, while still walking (was 60 m)
 LOOT_BOOST = True      # boost-run on loot trips and exploring longer than 15 m ...
 LOOT_BOOST_E = 55.0    # ... while energy is above this (keeps the rest for fights and escapes)
+
+# ---- flying when several enemies are close: hop and jet at random heights so we're not a still target between them
+FLY = True
+FLY_MIN_ENEMIES = 2    # enemy mechs in sight ...
+FLY_NEAR_R = 100.0     # ... within this many metres
+FLY_JET_S = (0.15, 0.6)  # random jet time per hop (s): ~3-8 m high, ~2-9 energy
+FLY_HOP_P = 0.5        # chance per grounded decision to hop again (irregular rhythm)
+FLY_MAX_H = 10.0       # stop jetting this high above the terrain (don't climb onto roofs)
+FLY_RESERVE = 20.0     # never jet below this energy (+25 more when we hold lightning: it fires on energy)

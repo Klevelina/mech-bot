@@ -206,6 +206,36 @@ class FightMixin:
         return best
 
     # ---------- escape from attackers we can't hit
+    def laser_hide(self, me, mechs, t, t_start):
+        """No laser of our own: a laser shooting us from beyond our reach (or charging on us) can't be answered.
+        Break line of sight to it, if a hidden spot is close. Starts an escape and returns True when it does."""
+        if any(w and w["kind"] == "laser" for w in me["weapons"]):
+            return False  # we can shoot back at the same range
+        x, y, z = me["pos"]
+        vis = {m["id"]: m for m in mechs}
+        threats = [i for i, ht in self.laser_hits.items() if t - ht < 3.0]
+        for m in mechs:  # telegraphed: a visible laser charging with its aim on us
+            if m.get("charging") and m["id"] not in threats and \
+                    abs(wrap(m["aim"][0] - math.atan2(y - m["pos"][1], x - m["pos"][0]))) < 0.15:
+                threats.append(m["id"])
+        for i in threats:
+            m = vis.get(i)
+            if m is not None:
+                src = m["pos"]
+            elif i in self.epos and t - self.epos[i][0] < 10.0:
+                src = self.epos[i][1]
+            else:
+                continue
+            if math.hypot(src[0] - x, src[1] - y) < LASER_HIDE_MIN:
+                continue  # close enough for our gun / lightning: fight it (the playbook rushes lasers)
+            c = self.nav.hide_cell(src[0], src[1], src[2] + 8.0, x, y, LASER_HIDE_R, t_start + 0.012)
+            if c < 0:
+                continue
+            self.escape = {"src": i, "goal": self.nav.center(c), "t": t, "from": list(src), "laser": True}
+            mf.log(f"t={t:.1f} hide from laser {i} at {src[0]:.0f},{src[1]:.0f}")
+            return True
+        return False
+
     def update_escape(self, me, mechs, t, t_start):
         if not ESCAPE_UNHITTABLE or self.nav is None:
             self.escape = None
@@ -213,8 +243,25 @@ class FightMixin:
         x, y, z = me["pos"]
         if self.escape is not None:
             src = self.escape["src"]
-            if t - self.attackers.get(src, -1e9) > 4.0 or t - self.escape["t"] > 20.0:
+            hold = LASER_HOLD_S if self.escape.get("laser") else 4.0
+            came = None
+            if self.escape.get("laser"):
+                came = next((m for m in mechs if m["id"] == src and self.can_hit(me, m) and
+                             math.hypot(m["pos"][0] - x, m["pos"][1] - y) < LASER_HIDE_MIN), None)
+            if came is not None:
+                self.escape = None  # it followed us round the corner: close range, our gun's fight - shoot now
+                return
+            if t - max(self.attackers.get(src, -1e9), self.escape["t"]) > hold or t - self.escape["t"] > 20.0:
+                if self.escape.get("laser") and self.cover is not None:
+                    # don't walk back into its sightline: a cover spot it could see from there gets replaced
+                    lx, ly, lz = self.escape["from"]
+                    cx, cy = self.cover
+                    if self.nav.los(lx, ly, lz + 8.0, cx, cy, self.nav.surf[self.nav.cell_of(cx, cy)] + 8.5):
+                        self.bad.add(self.nav.cell_of(cx, cy))
+                        self.zone_key = None  # choose a new cover spot next decision
                 self.escape = None  # it stopped hurting us (or we gave it long enough)
+            return
+        if LASER_HIDE and self.laser_hide(me, mechs, t, t_start):
             return
         if t - self.escape_check_t < 0.5:
             return
@@ -457,11 +504,7 @@ class FightMixin:
 
         # pick the fight: a lone enemy, nobody else on us, we're healthy -> close to our weapon's range
         aggro = EARLY_AGGRO and getattr(self, "phase", "") == "early"
-        if HUNT_LONE:
-            # any phase: a lone enemy (nobody else seen/heard within AGGRO_CLEAR_R) we beat on the odds -> go get it
-            aggro = True
-            hunt_ok = hp_frac > AGGRO_HP
-        elif EARLY_AGGRO:
+        if EARLY_AGGRO:
             # early: pick off weaker enemies; after that, never go looking for fights (hide and heal instead)
             hunt_ok = aggro and hp_frac > AGGRO_HP and self.weaker(me, m)
         else:
