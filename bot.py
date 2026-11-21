@@ -21,9 +21,10 @@ from fight import FightMixin
 from evade import EvadeMixin
 from artillery import ArtilleryMixin
 from stealth import StealthMixin
+from combat import CombatMixin
 
 
-class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryMixin, StealthMixin):
+class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryMixin, StealthMixin, CombatMixin):
     name = "mech-fight"
 
     def __init__(self, hello: mf.Hello):
@@ -413,6 +414,11 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             d = math.hypot(dx, dy)
             if d > 0.3:
                 move = [dx / d, dy / d]
+        # squad all in, in a fight with a line of fire: keep moving (strafe at our range, hidden from the others, dodge)
+        if COMBAT_MOVE and self.all_in and fight_m is not None and mode not in COMBAT_MOVE_SKIP:
+            cm = self.combat_move(obs, me, fight_m, t, t_start)
+            if cm is not None:
+                move, mode = cm
         moving = move != [0.0, 0.0]
         jinking, extra_boost = self.evade(obs, me, move, t)
         if jinking:

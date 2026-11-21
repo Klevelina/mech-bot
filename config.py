@@ -111,6 +111,15 @@ FIGHT_CUBES_HURT = 0.5   # x this below half HP
 # squad all in: a laser we'd take is worth a long walk (gun + laser is the leaderboard loadout), any phase
 LASER_SEEK = True
 LASER_SEEK_R = 240.0
+# squad all in: combat movement (combat.py) - with the target in our line of fire, every decision pick the best of
+# staying or a COMBAT_STEP m step in 16 directions: our range, line of fire, hidden from others, strafing at random
+COMBAT_MOVE = True
+COMBAT_STEP = 6.0
+COMBAT_OTHERS_R = 170.0  # other enemies this close count (up to 3)
+COMBAT_DODGE_S = 0.7     # sidestep bullets that would hit us within this many seconds
+# modes that keep their own movement (retreat, finishing, cubes, escapes, drop contests, pursuit out of sight)
+COMBAT_MOVE_SKIP = ("RETREAT", "RUSH", "FIGHTCUBE", "FINISH", "ESCAPE", "CONTEST", "SNIPE", "PURSUE", "DISENGAGE",
+                    "HIDE", "HIDDEN", "VANISH", "drop", "DROPWATCH")
 KILL_PILE = True       # (any match) our kill drops its cubes (+2) and weapons where it died: loot target right away
 
 DROP_WAIT_CALM = True  # FREE-FOR-ALL ONLY (vs the squad, 2+ enemies at a drop are hunters coming for us, not a fight):
