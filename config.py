@@ -135,6 +135,10 @@ ALLIN_UPGRADES_LASER = ["plating", "armor", "laser_damage", "laser_charge", "nan
                         "lightning_efficiency", "lightning_range", "servos", "gun_mag", "gun_velocity", "gyros"]
 ALLIN_UPGRADES = ["plating", "armor", "gun_damage", "nanites", "gun_rate", "lightning_efficiency", "lightning_range",
                   "laser_damage", "servos", "laser_charge", "gun_mag", "gun_velocity", "gyros"]
+# aim / laser (all matches)
+AIM_LATENCY = 0.075      # s between the observation and our shot: lead the target (and our own muzzle) by this too
+LASER_PRECHARGE = True   # target out of our line of fire for the moment: keep the laser charged for when it shows
+LASER_HOLD_AIM = True    # full charge: let go only with the beam on target (keep holding otherwise)
 KILL_PILE = True       # (any match) our kill drops its cubes (+2) and weapons where it died: loot target right away
 
 DROP_WAIT_CALM = True  # FREE-FOR-ALL ONLY (vs the squad, 2+ enemies at a drop are hunters coming for us, not a fight):
