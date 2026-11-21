@@ -82,6 +82,33 @@ class FightMixin:
     def can_hit(self, me, m):
         return self.hit_zoff(me, m) is not None
 
+    def fight_odds(self, me, m, t, at=None):
+        """Who wins the damage race against m: (seconds until we die to everyone shooting us) divided by
+        (seconds for us to kill m). Above 1 we win. `at`: judge it at that distance (a hunt we're about to start;
+        the target is assumed to shoot back at full rate)."""
+        x, y = me["pos"][0], me["pos"][1]
+        d = math.hypot(m["pos"][0] - x, m["pos"][1] - y) if at is None else at
+        hittable = True if at is not None else self.can_hit(me, m)
+        kill_s = (m.get("hp") or 1400.0) / self.our_dps(me, m, d, hittable)
+        if at is not None:
+            log = self.dmg_log.get(m["id"])
+            seen = sum(a for (ht, a) in log if t - ht < 3.0) / 3.0 if log else 0.0
+            theirs = max(self.emodel.dps_at(m["id"], d, t), seen)
+        else:
+            theirs = self.threat_dps(m, d, t)
+        others = sum(dps for o, dps in self.active if o["id"] != m["id"] and
+                     (t - self.attackers.get(o["id"], -1e9) < 4.0 or t - self.npc_attackers.get(o["id"], -1e9) < 4.0))
+        die_s = me["hp"] / max(1.0, theirs + others)
+        return die_s / max(0.1, kill_s)
+
+    def weaker(self, me, m):
+        """An easy early pick: less HP than us (by AGGRO_WEAKER), or its back turned to us."""
+        hp = m.get("hp")
+        if hp is not None and hp <= AGGRO_WEAKER * me["hp"]:
+            return True
+        x, y = me["pos"][0], me["pos"][1]
+        return abs(wrap(math.atan2(y - m["pos"][1], x - m["pos"][0]) - m["aim"][0])) > math.pi / 2
+
     # ---------- threat weighing
     def threat_dps(self, m, d, t):
         """Damage per second foe m does (or could do) to us: max of what we measured and an estimate."""
@@ -371,7 +398,8 @@ class FightMixin:
                 near_pile = PILE_FINISH and frac < PILE_FINISH_HP and any(
                     it["kind"] == "pile" and math.hypot(it["x"] - ex, it["y"] - ey) < 30.0
                     for it in self.mem.items.values())
-                if frac >= FINISH_HP and not near_pile:
+                fin_hp = AGGRO_FINISH_HP if (EARLY_AGGRO and getattr(self, "phase", "") == "early") else FINISH_HP
+                if frac >= fin_hp and not near_pile:
                     continue
                 d = math.hypot(ex - x, ey - y) or 1.0
                 leaving = (m["vel"][0] * (ex - x) + m["vel"][1] * (ey - y)) / d > 1.0
@@ -428,12 +456,18 @@ class FightMixin:
                 return
 
         # pick the fight: a lone enemy, nobody else on us, we're healthy -> close to our weapon's range
-        if HUNT and m["kind"] == "mech" and hp_frac > HUNT_HP and not self.late_zone:
+        aggro = EARLY_AGGRO and getattr(self, "phase", "") == "early"
+        if EARLY_AGGRO:
+            # early: pick off weaker enemies; after that, never go looking for fights (hide and heal instead)
+            hunt_ok = aggro and hp_frac > AGGRO_HP and self.weaker(me, m)
+        else:
+            hunt_ok = hp_frac > HUNT_HP
+        if HUNT and m["kind"] == "mech" and hunt_ok and not self.late_zone:
             n_visible = sum(1 for o in self._obs_mechs if o["kind"] == "mech")
             others_on_us = any(i != m["id"] and t - at < 4.0 for i, at in self.attackers.items())
             # anyone else seen/heard near us lately (squad reinforcements)? sounds near the target are its own
             for key, (et, qx, qy) in self.enemies.items():
-                if key == m["id"] or t - et > 10.0 or math.hypot(qx - x, qy - y) > 150.0:
+                if key == m["id"] or t - et > 10.0 or math.hypot(qx - x, qy - y) > (AGGRO_CLEAR_R if aggro else 150.0):
                     continue
                 if isinstance(key, tuple) and math.hypot(qx - ex, qy - ey) < 40.0:
                     continue
@@ -444,7 +478,8 @@ class FightMixin:
                 lo, hi = band(our_role(me["weapons"]), m.get("weapons"))
                 pref = max(15.0, (lo + hi) / 2.0)
             capturing = t - self.capturers.get(m["id"], -1e9) < 3.0  # about to be healed by a drop
-            if n_visible == 1 and not others_on_us and not capturing and d > pref + 10.0:
+            winning = not FIGHT_ODDS or self.fight_odds(me, m, t, at=pref) >= FIGHT_WIN_R
+            if n_visible == 1 and not others_on_us and not capturing and d > pref + 10.0 and winning:
                 # low on ammo (or reloading): reload first, then go in
                 g = next((w for w in me["weapons"] if w and w["kind"] == "gun"), None)
                 if RELOAD_BEFORE_HUNT and g and self.style == "gun" and (
@@ -456,6 +491,19 @@ class FightMixin:
                 px, py = self.clamp_safe(ex + pref * math.cos(a), ey + pref * math.sin(a))
                 self.fight_goal, self.fight_mode = self.nav.center(self.nav.nearest_main(px, py)), "HUNT"
                 return
+
+        if FIGHT_ODDS and m["kind"] == "mech" and t - self.last_dmg_t < 3.0:
+            # being shot and losing the race (we'd die well before it does): leave now, while we still have HP
+            hittable = self.can_hit(me, m)
+            quick = hittable and (m.get("hp") or 1400.0) / self.our_dps(me, m, d, True) < 2.0
+            if not quick and self.fight_odds(me, m, t) < FIGHT_LOSE_R:
+                # only with a hiding spot close by: backing off across open ground just gets us shot longer
+                eyes = [(o["pos"][0], o["pos"][1], o["pos"][2] + 8.0) for o in self._obs_mechs if o["kind"] == "mech"]
+                c = self.nav.flank_cell(eyes, None, x, y, DISENGAGE_R, t_start + 0.010)
+                if c >= 0:
+                    self.fight_goal = self.nav.center(c)
+                    self.fight_mode = "DISENGAGE"
+                    return
 
         if WEIGH_THREATS and self.active:
             def eye(o):

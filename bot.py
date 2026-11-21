@@ -180,7 +180,8 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         if PHASES:
             group_weapon = any(w and w["kind"] in ("lightning", "mortar") for w in weapons)
             heal_lo, heal_hi = {"early": (None, None),
-                                "mid": ((PHASE_MID_HEAL, 0.9) if group_weapon else (None, None)),
+                                "mid": (AGGRO_MID_HEAL if EARLY_AGGRO else
+                                        (PHASE_MID_HEAL, 0.9) if group_weapon else (None, None)),
                                 "late": (PHASE_LATE_HEAL, 1.0)}[self.phase]
         if heal_lo is not None and not self.recovering and hp_frac < heal_lo and t - self.threat_t > 3.0:
             self.recovering = True
@@ -198,7 +199,7 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         # ---- loot target
         target = None
         if LOOT and self.escape is None and t - self.threat_t > SAFE_AFTER:
-            if self.target is not None and (self.target not in self.mem.items or t - self.target_since > 40):
+            if self.target is not None and (self.target not in self.mem.items or t - self.target_since > LOOT_GIVEUP_S):
                 if self.target in self.mem.items:
                     self.mem.banned.add(self.target)  # took too long
                 self.target = None
@@ -294,7 +295,7 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
                 stop_r = 2.0
             elif k == "crate":
                 stop_r = 25.0 if visible else 8.0
-                if visible and dist_t < 60:
+                if visible and dist_t < LOOT_CRATE_SHOOT_R:
                     shoot = ([target["x"], target["y"], target["z"]], None, 1.2, 1.4)
             elif k == "npc":
                 stop_r = 60.0 if visible else 20.0
@@ -367,6 +368,11 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         jump = False
         boost = not me["in_zone"] or (self.escape is not None and me["energy"] > 30) or extra_boost or \
             (mode == "CONTEST" and dgoal > 6.0 and me["energy"] > 40) or             (mode == "FINISH" and dgoal > 8.0 and me["energy"] > 30)
+        if mode == "DISENGAGE" and dgoal > 3.0 and me["energy"] > 30:
+            boost = True  # reach the hiding spot fast
+        if LOOT_BOOST and mode in ("cube", "pickup", "crate", "npc", "pile", "explore") and dgoal > 15.0 and \
+                me["energy"] > LOOT_BOOST_E:
+            boost = True  # run (19.5 m/s, not 11.7) on loot trips, keeping energy for fights and escapes
         if self.unstick > 0:
             self.unstick -= 1
             boost = True
