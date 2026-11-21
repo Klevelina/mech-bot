@@ -158,6 +158,10 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             self.nav.safe = (sc[0], sc[1], max(sr - 4.0, 5.0))
         self.aim.observe(t, obs["mechs"])
         self.style = self.loadout_style(weapons)
+        self.big = POWER and me.get("cubes", 0) >= POWER_BIG_CUBES  # bigger mech, easier to hit: more careful
+        if self.big and not getattr(self, "_was_big", False):
+            self.zone_key = None  # just got big: re-pick a more enclosed cover spot now
+        self._was_big = self.big
         # a visible enemy with lightning within 50 m: its arc would cancel a laser charge (playbook)
         self.lit_near = any(o["kind"] == "mech" and "lightning" in (o.get("weapons") or []) and
                             math.hypot(o["pos"][0] - x, o["pos"][1] - y) < 50.0 for o in obs["mechs"])
@@ -222,7 +226,8 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
                 skip = ()
                 if self.recovering:
                     md, skip = min(md, RECOVER_LOOT_DIST), ("crate", "npc")
-                tid, _ = self.mem.best_target(me, zone, weapons, late, md, lambda ix, iy: self.danger(ix, iy, t), skip)
+                tid, _ = self.mem.best_target(me, zone, weapons, late, md, lambda ix, iy: self.danger(ix, iy, t), skip,
+                                              phase=self.phase)
                 if tid != self.target:
                     self.target, self.target_since = tid, t
             if self.target is not None:

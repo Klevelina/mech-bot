@@ -128,6 +128,16 @@ LASER_HOLD_S = 4.0     # stay hidden until this long without a laser hit; on lea
                        # the gun; if it follows us within LASER_HIDE_MIN with a clear shot, stop hiding and shoot first
 LASER_RELOAD_FRAC = 0.75  # hidden from a laser: reload below this fraction of a magazine
 
+# ---- power: get stronger faster (cubes = +4% HP and damage each, up to 10), then be careful because we're bigger
+POWER = True
+POWER_WEAPON_V = 12.0  # no laser/lightning yet: those pickups are worth this (a cube is 3), any phase ...
+POWER_DRONE_V = 9.0    # ... early phase: a drone is worth this (2 cubes, weak shooter; was 5) ...
+POWER_R = 180.0        # ... and both are gone for up to this far (other loot: the phase's normal range)
+POWER_BIG_CUBES = 5    # from this many cubes (25% bigger, easier to hit):
+POWER_BIG_EXPO = 2.0   # ... cover spots: open directions count this much more (more enclosed corners)
+POWER_BIG_HIDE_HP = 0.45  # ... under fire, hide from everyone below this HP (normally HIDE_LOW_HP 0.30)
+POWER_BIG_LOSE_R = 1.0    # ... leave a fight (to cover within DISENGAGE_R) below these odds (normally 0.8)
+
 # ---- faster looting
 LOOT_GIVEUP_S = 15.0   # give up on an item after this long (was 40 s)
 LOOT_CRATE_SHOOT_R = 90.0  # start shooting a visible crate this far away, while still walking (was 60 m)
