@@ -5,11 +5,7 @@ LOOT = True            # go for items at all
 LOOT_UNTIL = 150.0     # match time after which we only loot items close by
 LOOT_LATE_DIST = 40.0  # ... "close by" after LOOT_UNTIL
 LOOT_MAX_DIST = 110.0  # (160 in the 2.94 build) early-phase loot range
-SAFE_AFTER = 3.0       # s without seeing an enemy mech / being hit by one before looting again (6 in the 2.90 build)
-FIGHTING_S = 3.0       # "in a fight" for this long after the last threat (no sweeping the torso, no weapon swaps)
-HEAL_AFTER_S = 3.0     # start healing (phases) after this long without a threat
-DROP_AFTER_S = 3.0     # go for a supply drop only after this long without a threat
-ESCAPE_END_S = 4.0     # an escape ends this long after the attacker's last hit
+SAFE_AFTER = 6.0       # s without seeing an enemy mech / being hit by one before looting again
 DANGER_R = 130.0       # skip items this close to where an enemy mech was seen recently
 DANGER_S = 25.0        # ... "recently"
 ENERGY_RESERVE = 25.0  # lightning won't spend below this (kept for boost/jet escapes)
@@ -111,6 +107,8 @@ UPGRADE_BY_LOADOUT = True  # upgrade order depends on what we carry (loot.UPGRAD
 # ---- early picks, then hide and heal: hunt weaker enemies only in the early phase, never after; heal more mid game
 EARLY_AGGRO = True
 AGGRO_HP = 0.5         # early: hunt while our HP is above this (instead of HUNT_HP)
+HUNT_LONE = True       # hunt in every phase (not only early, not only weaker targets): a lone enemy, nobody else
+                       # seen/heard within AGGRO_CLEAR_R in 10 s, our HP above AGGRO_HP, fight odds >= FIGHT_WIN_R
 AGGRO_CLEAR_R = 80.0   # early: hunt only if no other enemy was seen/heard this close to us in 10 s (normally 150 m)
 AGGRO_WEAKER = 0.9     # "weaker" target: its HP at most this x ours, or its back is turned to us
 AGGRO_FINISH_HP = 0.4  # early: chase a fleeing enemy below this HP fraction (normally FINISH_HP)
@@ -122,15 +120,6 @@ FIGHT_WIN_R = 1.5      # start a hunt only with odds at least this good (judged 
 FIGHT_LOSE_R = 0.8     # being shot with odds below this: back off out of sight (unless the target dies within 2 s)
 DISENGAGE_R = 35.0     # ... only to a spot hidden from every visible enemy within this many metres (boost-run there);
                        #     none that close: stay and fight (running in the open only gets us shot longer)
-
-# ---- hide from lasers we can't answer: no laser of our own, lasered (or a laser charging on us) from beyond our reach
-LASER_HIDE = True
-LASER_HIDE_MIN = 60.0  # closer than this our gun / lightning can fight it: don't hide
-LASER_HIDE_R = 50.0    # hide only to a spot it can't see within this many metres (none: fight as usual)
-LASER_HOLD_S = 4.0     # stay hidden until this long without a laser hit; on leaving, a cover spot the laser could
-                       # see from where it was is swapped for another one. While hidden: watch its way in, top up
-                       # the gun; if it follows us within LASER_HIDE_MIN with a clear shot, stop hiding and shoot first
-LASER_RELOAD_FRAC = 0.75  # hidden from a laser: reload below this fraction of a magazine
 
 # ---- faster looting
 LOOT_GIVEUP_S = 15.0   # give up on an item after this long (was 40 s)
