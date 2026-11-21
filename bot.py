@@ -121,7 +121,7 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         weapons = me["weapons"]
         act: mf.Action = {"tick": obs["tick"]}
         if obs["offer"]:
-            act["pick"] = pick_upgrade(obs["offer"], me["weapons"])
+            act["pick"] = pick_upgrade(obs["offer"], me["weapons"], self.situation == "squad")
 
         # ---- world model
         self.mem.update(obs)

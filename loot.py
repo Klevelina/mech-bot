@@ -2,7 +2,7 @@
 import math
 
 from config import LIGHTNING_FIRST, PLAYBOOK, DROP_GUN_FOR_PAIR, MORTAR_USE, UPGRADE_BY_LOADOUT, \
-    POWER, POWER_WEAPON_V, POWER_DRONE_V, POWER_R, POWER_MORE, POWER_CRATE_V
+    SQUAD_UPGRADES, POWER, POWER_WEAPON_V, POWER_DRONE_V, POWER_R, POWER_MORE, POWER_CRATE_V
 
 # What a found item is worth before distance (rough "cubes" scale).
 VALUE = {"cube": 3.0, "crate": 2.5, "npc": 5.0, "pile": 6.0}  # a drone drops 2 cubes
@@ -29,7 +29,16 @@ UPGRADES_FOR = {
 }
 
 
-def upgrade_order(weapons):
+def upgrade_order(weapons, squad=False):
+    order = _loadout_order(weapons)
+    if squad and SQUAD_UPGRADES:
+        # vs the squad: hunters come one at a time and we heal between them -> faster healing and more HP first;
+        # lightning chain needs grouped enemies, so it goes last
+        return SQUAD_UPGRADES + [u for u in order if u != "lightning_chain"] + ["lightning_chain"]
+    return order
+
+
+def _loadout_order(weapons):
     kinds = {w["kind"] for w in (weapons or []) if w}
     if "laser" in kinds and "lightning" in kinds:
         key = "hybrid"
@@ -44,9 +53,9 @@ def upgrade_order(weapons):
     return UPGRADES_FOR[key] + UPGRADE_ORDER
 
 
-def pick_upgrade(offer, weapons=None):
+def pick_upgrade(offer, weapons=None, squad=False):
     ids = [c["id"] for c in offer["choices"]]
-    order = upgrade_order(weapons) if (UPGRADE_BY_LOADOUT and weapons is not None) else UPGRADE_ORDER
+    order = upgrade_order(weapons, squad) if (UPGRADE_BY_LOADOUT and weapons is not None) else UPGRADE_ORDER
     for want in order:
         if want in ids:
             return ids.index(want)
