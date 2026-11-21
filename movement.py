@@ -7,6 +7,7 @@ import mechfight as mf
 from config import *  # noqa: F401,F403  (switches and tuning numbers)
 from util import wrap  # noqa: F401
 from nav import Search
+from playbook import our_role
 
 
 class MoveMixin:
@@ -32,6 +33,35 @@ class MoveMixin:
             return nav.center(nav.nearest_main(nc[0], nc[1]))
         cands.sort()
         best, bs, bface = cands[0][1], 1e18, None
+        role = our_role(getattr(self, "_weapons", None) or [])
+        if ROLE_COVER and role in ("sniper", "hybrid"):
+            # laser: back to a wall, a long open view in front (the hunter crosses open ground under our beam)
+            lo, hi = ROLE_COVER_SNIPER_OPEN
+            for s, c in cands[:60]:
+                e = self.expo.get((c, "far"))
+                if e is None:
+                    e = self.expo[(c, "far")] = nav.exposure(c, reach=ROLE_COVER_SNIPER_REACH, step=4.0)
+                n_far, face = e
+                if n_far < lo:
+                    s += EXPO_W * 2.0 * (lo - n_far)
+                elif n_far > hi:
+                    s += EXPO_W * (n_far - hi)
+                if s < bs:
+                    best, bs, bface = c, s, face
+            self.cover_face = bface
+            return nav.center(best)
+        if ROLE_COVER and role == "brawler":
+            # lightning: an enclosed spot counted at arc range - anyone who can see us is inside our 45 m
+            for s, c in cands[:60]:
+                e = self.expo.get((c, "near"))
+                if e is None:
+                    e = self.expo[(c, "near")] = nav.exposure(c, reach=ROLE_COVER_BRAWLER_REACH)
+                n_open, face = e
+                s += EXPO_W * n_open + (10.0 if n_open == 0 else 0.0)
+                if s < bs:
+                    best, bs, bface = c, s, face
+            self.cover_face = bface
+            return nav.center(best)
         if PARK_EXPOSURE:
             # among the closest candidates, prefer corners/alcoves: few directions an enemy can see us from
             for s, c in cands[:60]:

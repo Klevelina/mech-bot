@@ -53,6 +53,24 @@ EARLY_FARM = True      # squad, early phase (one hunter out): loot again sooner 
 EARLY_FARM_SAFE = 3.0  # ... seconds after a threat (SAFE_AFTER otherwise)
 EARLY_FARM_DANGER_R = 70.0  # ... skip loot this close to where an enemy was seen/heard (DANGER_R otherwise) ...
 EARLY_FARM_DANGER_S = 10.0  # ... in the last this many seconds (DANGER_S otherwise)
+# empty slot: any weapon beats none - take the closest one (mortar, laser, lightning all worth POWER_WEAPON_V, up to
+# POWER_R away); swapping it for a better one later follows the usual rules (loot.weapon_take)
+NEAREST_WEAPON = True
+# squad, early phase (the first hunters are the easy bots): farm them - hunt the lone hunter at even odds
+EARLY_FARM_HUNT = True
+EARLY_FARM_WIN_R = 1.0   # fight odds needed to go in (FIGHT_WIN_R = 1.5 otherwise)
+EARLY_FARM_HP = 0.45     # ... while our HP is above this (HUNT_HP = 0.6 otherwise; SQUAD_HEAL still heals below 60%)
+# where we wait / heal between fights depends on our weapon (movement.choose_cover):
+# laser (sniper/hybrid): back to a wall facing long open ground; lightning: tight spots (they must come within 45 m);
+# gun / mortar: corners as before (mortar lobs over the building in front)
+ROLE_COVER = True
+ROLE_COVER_SNIPER_REACH = 150.0  # laser: how far an open direction has to see
+ROLE_COVER_SNIPER_OPEN = (3, 7)  # ... want this many long open directions (of 12): fewer = no view, more = no wall
+ROLE_COVER_BRAWLER_REACH = 45.0  # lightning: count open directions out to its arc range only
+# bodies of our kills: worth their cubes (+2) and the weapons it carried that we'd take (loot.weapon_take rules)
+PILE_BY_LOOT = True
+PILE_CUBE_V = 3.0      # per cube in the pile (a loose cube is 3)
+PILE_WEAPON_V = 12.0   # a weapon we'd take from it (POWER_WEAPON_V)
 KILL_PILE = True     # (any match) our kill drops its cubes (+2) and weapons where it died: loot target right away
 
 DROP_WAIT_CALM = True  # FREE-FOR-ALL ONLY (vs the squad, 2+ enemies at a drop are hunters coming for us, not a fight):

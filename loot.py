@@ -2,7 +2,8 @@
 import math
 
 from config import LIGHTNING_FIRST, PLAYBOOK, DROP_GUN_FOR_PAIR, MORTAR_USE, UPGRADE_BY_LOADOUT, \
-    SQUAD_UPGRADES, POWER, POWER_WEAPON_V, POWER_DRONE_V, POWER_R, POWER_MORE, POWER_CRATE_V
+    SQUAD_UPGRADES, POWER, POWER_WEAPON_V, POWER_DRONE_V, POWER_R, POWER_MORE, POWER_CRATE_V, NEAREST_WEAPON, \
+    PILE_BY_LOOT, PILE_CUBE_V, PILE_WEAPON_V
 
 # What a found item is worth before distance (rough "cubes" scale).
 VALUE = {"cube": 3.0, "crate": 2.5, "npc": 5.0, "pile": 6.0}  # a drone drops 2 cubes
@@ -182,6 +183,19 @@ class Memory:
                 d = weapon_take(it["wkind"], weapons, late, False)
                 if d is None:
                     continue
+                if NEAREST_WEAPON and d == "empty":
+                    # any weapon beats an empty slot: the closest one first, same value for every kind
+                    # (swaps to a better one later follow the normal rules below)
+                    v, reach = POWER_WEAPON_V, max(max_dist, POWER_R)
+                    ix, iy = it["x"], it["y"]
+                    dist = math.hypot(ix - x, iy - y)
+                    if dist > reach or danger(ix, iy) or self.reachable_cell(it) < 0 or \
+                            math.hypot(ix - nc[0], iy - nc[1]) > nr - 5 or math.hypot(ix - cc[0], iy - cc[1]) > cr - 5:
+                        continue
+                    s = v / (dist + 30.0)
+                    if s > bs:
+                        best, bs = i, s
+                    continue
                 v = 5.0 if d == "empty" else 3.0
                 if it["wkind"] == "mortar":
                     v = 3.0
@@ -198,6 +212,13 @@ class Memory:
                 if POWER_MORE and k == "crate":
                     v = POWER_CRATE_V  # a cube plus a 50% chance of a weapon
             reach = max_dist
+            if PILE_BY_LOOT and k == "pile" and "cubes" in it:
+                # one of our kills: its cubes, plus the best weapon it carried that we'd take
+                v = PILE_CUBE_V * it["cubes"]
+                if any(weapon_take(wk, weapons, late, False) is not None for wk in it["wkinds"]):
+                    v += PILE_WEAPON_V
+                    if phase != "late":
+                        reach = max(max_dist, POWER_R)  # late game: only close by, like all loot
             if POWER:
                 if k == "pickup" and no_special and it["wkind"] in SPECIALS:
                     v, reach = POWER_WEAPON_V, max(max_dist, POWER_R)  # a good weapon first (any phase)

@@ -259,7 +259,7 @@ class Nav:
                 return best
         return c0
 
-    def exposure(self, c, rays=12, reach=60.0):
+    def exposure(self, c, rays=12, reach=60.0, step=2.0):
         """How open cell c is: of `rays` horizontal directions from eye height, how many see `reach` m
         without hitting a building or terrain. Returns (open count, yaw to face = mean open direction or None)."""
         cx, cy = self.center(c)
@@ -286,7 +286,7 @@ class Nav:
                 if 0 <= vi < tnx and 0 <= vj < tny and hm[vj * tnx + vi] * hsc > z0:
                     blocked = True
                     break
-                d += 2.0
+                d += step
             if not blocked:
                 n_open += 1
                 sx += dx

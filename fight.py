@@ -485,8 +485,11 @@ class FightMixin:
         if not PLAYSTYLE or self.nav is None or m is None:
             self.fight_goal = None
             return
-        if t - self.fight_goal_t < 1.0 and m["id"] == self.fight_goal_id:
-            return  # same target: refresh once a second; new target: right away
+        n_vis = sum(1 for o in self._obs_mechs if o["kind"] == "mech")
+        more = n_vis > getattr(self, "_fg_nvis", 0)  # someone else just came into sight: re-decide (end a hunt) now
+        self._fg_nvis = n_vis
+        if t - self.fight_goal_t < 1.0 and m["id"] == self.fight_goal_id and not more:
+            return  # same target: refresh once a second; new target or a new enemy in sight: right away
         self.fight_goal_t = t
         self.fight_goal_id = m["id"]
         x, y = me["pos"][0], me["pos"][1]
@@ -511,6 +514,10 @@ class FightMixin:
             hunt_ok = False  # healing between hunters: let the next one come to us, don't go looking
         else:
             hunt_ok = hp_frac > HUNT_HP
+        # squad, early: the first hunters are the easy bots - go and kill them (still not while healing)
+        farm = EARLY_FARM_HUNT and getattr(self, "situation", "") == "squad" and aggro and not self.recovering
+        if farm:
+            hunt_ok = hp_frac > EARLY_FARM_HP
         if HUNT and m["kind"] == "mech" and hunt_ok and not self.late_zone:
             n_visible = sum(1 for o in self._obs_mechs if o["kind"] == "mech")
             others_on_us = any(i != m["id"] and t - at < 4.0 for i, at in self.attackers.items())
@@ -527,7 +534,7 @@ class FightMixin:
                 lo, hi = band(our_role(me["weapons"]), m.get("weapons"))
                 pref = max(15.0, (lo + hi) / 2.0)
             capturing = t - self.capturers.get(m["id"], -1e9) < 3.0  # about to be healed by a drop
-            winning = not FIGHT_ODDS or self.fight_odds(me, m, t, at=pref) >= FIGHT_WIN_R
+            winning = not FIGHT_ODDS or self.fight_odds(me, m, t, at=pref) >= (EARLY_FARM_WIN_R if farm else FIGHT_WIN_R)
             if n_visible == 1 and not others_on_us and not capturing and d > pref + 10.0 and winning:
                 # low on ammo (or reloading): reload first, then go in
                 g = next((w for w in me["weapons"] if w and w["kind"] == "gun"), None)
