@@ -507,6 +507,8 @@ class FightMixin:
         if EARLY_AGGRO:
             # early: pick off weaker enemies; after that, never go looking for fights (hide and heal instead)
             hunt_ok = aggro and hp_frac > AGGRO_HP and self.weaker(me, m)
+        if SQUAD_HEAL and getattr(self, "situation", "") == "squad" and self.recovering:
+            hunt_ok = False  # healing between hunters: let the next one come to us, don't go looking
         else:
             hunt_ok = hp_frac > HUNT_HP
         if HUNT and m["kind"] == "mech" and hunt_ok and not self.late_zone:
