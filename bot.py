@@ -22,9 +22,10 @@ from evade import EvadeMixin
 from artillery import ArtilleryMixin
 from stealth import StealthMixin
 from combat import CombatMixin
+from scan import ScanMixin
 
 
-class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryMixin, StealthMixin, CombatMixin):
+class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryMixin, StealthMixin, CombatMixin, ScanMixin):
     name = "mech-fight"
 
     def __init__(self, hello: mf.Hello):
@@ -518,6 +519,11 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             # hidden from a laser: watch the way it would come (see it first, front armor toward it)
             fx, fy = self.escape["from"][0], self.escape["from"][1]
             yaw, pitch = math.atan2(fy - y, fx - x), 0.0
+        if not mechs and shoot is None:
+            sy, sj, sb = self.scan_step(me, obs["mechs"], mode, t)
+            if sy is not None:
+                yaw, pitch = sy, 0.0  # gear sweep: a full turn to spot loot behind us
+                jump, boost = jump or sj, boost or sb
         act.update(move=move, boost=boost, jump=jump, aim=[yaw, pitch])
 
         # ---- take weapons in reach (swap rules in loot.weapon_take)
