@@ -47,6 +47,25 @@ SITUATION_CONFIRM_S = 1.0  # the extra deaths must stay unexplained this long (a
 # squad only: heal at cover between hunters (more come after each kill): (start below, heal up to) per phase;
 # no hunting while healing. None = use the phase rules (PHASES)
 SQUAD_HEAL = {"early": (0.6, 1.0), "mid": (0.75, 1.0), "late": (0.9, 1.0)}
+# fight one at a time BEFORE the second hunter shoots: the FLANK spot (our target sees us, the others don't) counts
+# every enemy mech known within MULTI_R (seen in the last 5 s: they share vision and come straight at us), plus
+# movement / gun sounds heard near or mid range in the last MULTI_SOUND_S - not only enemies that already hit us
+MULTI_EARLY = True
+MULTI_R = 120.0
+MULTI_SOUND_S = 3.0
+# ==== BIG SWING: kill fast, kill early (with MULTI_EARLY: never two at once)
+# glass cannon: upgrades for our weapons' damage / rate / charge first, survival (plating, armor, nanites) after
+DAMAGE_FIRST = True
+# early blitz (squad, early phase, not healing): go at the lone hunter at even odds, chase runners longer,
+# look for a hunter we lost (its last known spot) instead of looting, boost in
+BLITZ = True
+BLITZ_HP = 0.4         # hunt while our HP is above this (HUNT_HP 0.6 otherwise)
+BLITZ_WIN_R = 1.0      # ... with fight odds at least this (FIGHT_WIN_R 1.5 otherwise)
+BLITZ_FINISH_HP = 0.6  # chase a fleeing enemy below this HP fraction (AGGRO_FINISH_HP 0.4 otherwise) ...
+BLITZ_FINISH_S = 8.0   # ... for this long after losing sight of it (FINISH_S 4 otherwise)
+BLITZ_SEEK_S = 15.0    # nobody in sight: walk to where a hunter was seen this recently ...
+BLITZ_SEEK_HP = 0.6    # ... while our HP is above this
+BLITZ_BOOST_E = 45.0   # boost on HUNT / SEEK / FINISH trips while energy is above this
 KILL_PILE = True       # (any match) our kill drops its cubes (+2) and weapons where it died: loot target right away
 
 DROP_WAIT_CALM = True  # FREE-FOR-ALL ONLY (vs the squad, 2+ enemies at a drop are hunters coming for us, not a fight):
