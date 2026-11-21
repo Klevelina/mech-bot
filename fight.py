@@ -139,6 +139,13 @@ class FightMixin:
             hp = m.get("hp") or (350.0 if m["kind"] == "npc" else 1400.0)
             ttk = hp / self.our_dps(me, m, d, hittable)
             v = (tdps + 5.0) / ttk  # +5: a foe that isn't shooting yet is still worth something
+            if LIGHTNING_CLUSTER and m["kind"] == "mech" and d < 45.0 and \
+                    any(w and w["kind"] == "lightning" for w in me["weapons"]):
+                # the arc chains to others within chain_range: prefer the one with the most neighbours
+                chain = self.wcfg.get("lightning", {}).get("chain_range", 14.0)
+                nb = sum(1 for o in foes if o is not m and o["kind"] == "mech" and
+                         math.hypot(o["pos"][0] - m["pos"][0], o["pos"][1] - m["pos"][1]) <= chain)
+                v *= 1.0 + 0.7 * min(nb, 2)
             if m["id"] == self.cur:
                 v *= 1.15  # don't flip-flop
             if v > bs:
