@@ -24,6 +24,30 @@ from evade import EvadeMixin
 class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin):
     name = "mech-fight"
 
+    def precompute_cover(self, t0, budget_s=6.0):
+        """At startup (20 s budget): score every cover spot once (openness, tree concealment), and keep only
+        tree cells that hide us from at least half the directions. Stops after budget_s; the rest is lazy."""
+        nav = self.nav
+        if nav is None:
+            return
+        keep = []
+        for c, x, y in nav.tree_cells:
+            if time.perf_counter() - t0 > budget_s:
+                keep.append((c, x, y))
+                continue
+            h = self.conc[c] = nav.conceal(c)
+            if h >= 0.5:
+                keep.append((c, x, y))
+        nav.tree_cells = keep
+        for c, x, y in nav.cover + keep:
+            if time.perf_counter() - t0 > budget_s:
+                break
+            if c not in self.expo:
+                self.expo[c] = nav.exposure(c)
+            if TREE_COVER and c not in self.conc:
+                self.conc[c] = nav.conceal(c)
+        mf.log(f"cover precompute: {len(keep)} tree cells kept, {len(self.expo)} scored in {time.perf_counter() - t0:.2f}s")
+
     def __init__(self, hello: mf.Hello):
         cfg = hello["config"]
         self.cfg = cfg
@@ -73,6 +97,9 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin):
         self.sound_face = None  # (t heard, bearing, priority) of the most telling recent sound
         self.expo = {}          # cover cell -> (open directions, yaw to face)
         self.cover_face = None  # yaw to watch while parked at the current cover
+        self.conc = {}          # cell -> tree concealment fraction
+        self.ghost_repick_t = -1e9
+        self.precompute_cover(time.perf_counter())
         self.late_zone = False  # next circle <= LATE_RADIUS
         self.finish = None      # [enemy id, keep-chasing-until t, last pos] for a fleeing low-HP enemy
         self.finish_m = None
@@ -321,6 +348,18 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin):
             d = math.hypot(dx, dy)
             if d > 0.3:
                 move = [dx / d, dy / d]
+        # silent walking: an enemy known close by and nothing urgent -> stay under the step-sound speed
+        if SILENT and not mechs and t - self.last_dmg_t > 3.0 and move != [0.0, 0.0] and me["in_zone"] and mode in ("cover", "explore", "DROPWAIT", "cube",
+                                                                        "pickup", "crate", "npc"):
+            # ... but never at the cost of the zone: inside the next circle already, or time to reach it slowly
+            out_by = math.hypot(x - zone["next_center"][0], y - zone["next_center"][1]) - zone["next_radius"] + 5.0
+            slow = me["stats"].get("walk_speed", 11.7) * SILENT_FRAC
+            zone_ok = out_by <= 0 or t + out_by / slow + 5.0 < zone["shrink_start"]
+            for et, ex, ey in (self.enemies.values() if zone_ok else ()):
+                if t - et < 8.0 and (ex - x) ** 2 + (ey - y) ** 2 < SILENT_R ** 2:
+                    move = [move[0] * SILENT_FRAC, move[1] * SILENT_FRAC]
+                    mode += " quiet"
+                    break
         moving = move != [0.0, 0.0]
         jinking, extra_boost = self.evade(obs, me, move, t)
         if jinking:

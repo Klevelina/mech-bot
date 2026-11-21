@@ -40,7 +40,7 @@ CONTEST_MIN_HP = 0.5   # ... only above this HP fraction
 CONTEST_MAX_DIST = 80.0  # ... and only this close (less open ground to cross); sniping has no distance limit
 PARK_EXPOSURE = True   # park in corners/alcoves (few open directions) and face the open side
 EXPO_W = 6.0           # m of extra walking we accept per open direction avoided (of 12)
-HUNT = True            # one enemy in sight, nobody else on us, healthy: close to our weapon's range and fight
+HUNT = False           # one enemy in sight, nobody else on us, healthy: close to our weapon's range and fight
 HUNT_HP = 0.6          # ... "healthy"
 HUNT_RANGE = {"lightning": 30.0, "laser": 110.0, "gun": 70.0}
 SLICE_S = 0.020        # A* time per decision
@@ -57,8 +57,18 @@ LIGHTNING_FIRST = True  # prefer lightning pickups/swaps all game (chains throug
 LATE_RADIUS = 70.0     # "late game": next circle this small or smaller
 LATE_GAME = True       # late: no hunting / drop contests; hold fire unless it's a quick kill or they shoot us
 LATE_QUICK_KILL_S = 3.0  # ... "quick kill"
-FINISH = True          # chase a fleeing low-HP enemy for a few seconds (a kill is +1; if it gets away it heals)
+FINISH = False         # chase a fleeing low-HP enemy for a few seconds (a kill is +1; if it gets away it heals)
 FINISH_HP = 0.25       # ... its HP fraction below this
 FINISH_MIN_HP = 0.4    # ... and ours above this
 FINISH_S = 4.0         # ... keep going to where we last saw it this long
 FINISH_RANGE = {"lightning": 25.0, "laser": 100.0, "gun": 45.0}
+
+# ---- ghost play: survive to the end with max HP (test vs the fighting build)
+TREE_COVER = True      # park under tree crowns too: hidden from viewers beyond 45 m
+COVER_AVOID_ENEMIES = True  # cover spots within 100 m of an enemy seen/heard in the last 15 s cost +80 m
+SILENT = True          # an enemy known within SILENT_R: walk under the 5 m/s step-sound speed (when not urgent)
+SILENT_R = 60.0
+SILENT_FRAC = 0.4      # of walk speed (11.7 * 0.4 = 4.7 m/s)
+GHOST = True           # break contact: seen by 2+, losing the duel, or standing between two enemies -> out of sight
+GHOST_LOSE = 0.8       # "losing": our time to kill it > this x its time to kill us
+CONTEST_OTHERS = False  # snipe/contest someone else's drop capture (holding our own ring still works)
