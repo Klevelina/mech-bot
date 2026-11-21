@@ -283,7 +283,7 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             forced = next((m for m in mechs if m["id"] == self.contest[3]), None)
             if forced is not None:
                 fight_m = forced
-        finishing = FINISH and self.nav is not None and self.escape is None and not contesting and             self._finish(me, mechs, t)
+        finishing = FINISH and not (self.all_in and ALLIN_STRIP) and self.nav is not None and self.escape is None and not contesting and             self._finish(me, mechs, t)
         if finishing and self.finish_m is not None:
             fight_m = self.finish_m  # the fleeing low-HP one is the target
         if fight_m is not None and self.escape is None:
