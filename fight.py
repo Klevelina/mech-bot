@@ -410,13 +410,19 @@ class FightMixin:
         if not PLAYSTYLE or self.nav is None or m is None:
             self.fight_goal = None
             return
-        if t - self.fight_goal_t < 1.0 and m["id"] == self.fight_goal_id:
-            return  # same target: refresh once a second; new target: right away
-        self.fight_goal_t = t
-        self.fight_goal_id = m["id"]
         x, y = me["pos"][0], me["pos"][1]
         ex, ey = m["pos"][0], m["pos"][1]
         d = math.hypot(ex - x, ey - y)
+        # same target: refresh once a second, or fast while it closes on us / is inside our band; new target: now
+        every = 1.0
+        if FIGHT_FAST_S and m["kind"] == "mech":
+            closing = (m["vel"][0] * (x - ex) + m["vel"][1] * (y - ey)) / max(d, 1.0) > FIGHT_CLOSING_V
+            if closing or d < band(our_role(me["weapons"]), m.get("weapons"))[0]:
+                every = FIGHT_FAST_S
+        if t - self.fight_goal_t < every and m["id"] == self.fight_goal_id:
+            return
+        self.fight_goal_t = t
+        self.fight_goal_id = m["id"]
         theirs = set(m.get("weapons") or [])
         hp_frac = me["hp"] / max(1.0, me["max_hp"])
         goal = None

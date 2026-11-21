@@ -64,6 +64,7 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         self.fight_goal = None  # (x, y) where the playstyle wants us during a fight
         self.fight_goal_t = -1e9
         self.fight_goal_id = None
+        self.hold_at = None     # (x, y) where we stand our ground in a fight (FIGHT_HOLD)
         self.fight_mode = "FIGHTMOVE"
         self.last_dmg_t = -1e9
         self.style = "gun"
@@ -218,7 +219,8 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
                 skip = ()
                 if self.recovering:
                     md, skip = min(md, RECOVER_LOOT_DIST), ("crate", "npc")
-                tid, _ = self.mem.best_target(me, zone, weapons, late, md, lambda ix, iy: self.danger(ix, iy, t), skip)
+                tid, _ = self.mem.best_target(me, zone, weapons, late, md, lambda ix, iy: self.danger(ix, iy, t), skip,
+                                                 current=self.target)
                 if tid != self.target:
                     self.target, self.target_since = tid, t
             if self.target is not None:
@@ -249,6 +251,8 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         elif not mechs:
             self.fight_goal = None
             self.fight_goal_id = None
+        if fight_m is None or fight_m["kind"] != "mech" or self.escape is not None:
+            self.hold_at = None
         safe = t - self.threat_t > SAFE_AFTER
         if self.escape is not None:
             self.set_goal(self.escape["goal"], x, y)
@@ -272,6 +276,16 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             dgoal = math.hypot(self.fight_goal[0] - x, self.fight_goal[1] - y)
             stop_r = 3.0
             mode = self.fight_mode
+            self.hold_at = None
+        elif FIGHT_HOLD and fight_m is not None and fight_m["kind"] == "mech" and self.cover is not None and \
+                math.hypot(self.cover[0] - x, self.cover[1] - y) > FIGHT_HOLD_COVER_R:
+            # in a fight, inside our band: stand here and shoot instead of drifting back to the cover spot
+            if self.hold_at is None:
+                self.hold_at = (x, y)
+            self.set_goal(self.hold_at, x, y)
+            dgoal = math.hypot(self.hold_at[0] - x, self.hold_at[1] - y)
+            stop_r = 2.0
+            mode = "HOLD"
         elif DROPS and self.nav is not None and t - self.threat_t > 3.0 and self._drop(obs, me, t):
             g, stop_r, mode = self._drop_now
             self.set_goal(g, x, y)
