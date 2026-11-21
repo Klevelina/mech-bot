@@ -49,7 +49,7 @@ class DropsMixin:
                 continue
             # anyone else around the drop? then it's a brawl: keep our HP
             crowded = False
-            cwin = 3.0 if (DROP_WAIT_CALM and dist < 70.0) else 10.0  # watching from close by: what's there now
+            cwin = 3.0 if (self.wait_calm and dist < 70.0) else 10.0  # watching from close by: what's there now
             for key, (et, qx, qy) in self.enemies.items():
                 if key != holder and t - et < cwin and math.hypot(qx - px, qy - py) < 80.0:
                     if isinstance(key, tuple) and holder in self.emodel.pos and \
@@ -110,7 +110,7 @@ class DropsMixin:
         our HP, so losing HP doesn't matter as long as we live). Two or more: a brawl, skip."""
         x, y = me["pos"][0], me["pos"][1]
         # watching from close by we see/hear what's there now: only the last 3 s count (a dead brawler drops out)
-        win = 3.0 if (DROP_WAIT_CALM and math.hypot(px - x, py - y) < 70.0) else DROP_DANGER_S
+        win = 3.0 if (self.wait_calm and math.hypot(px - x, py - y) < 70.0) else DROP_DANGER_S
         near = [(k, qx, qy) for k, (et, qx, qy) in self.enemies.items()
                 if t - et < win and math.hypot(qx - px, qy - py) < DROP_DANGER_R]
         if not near:
@@ -154,7 +154,7 @@ class DropsMixin:
                 self.drop_target = None  # captured (by us or someone else)
             elif self.late_zone and d.get("holder") != me["id"]:
                 self.drop_target = None  # the final small circle started: drop it (unless we're capturing it now)
-            elif (not DROP_WAIT_CALM and d.get("holder") not in (None, me["id"]) and d.get("progress", 0) > 0.5) \
+            elif (not self.wait_calm and d.get("holder") not in (None, me["id"]) and d.get("progress", 0) > 0.5) \
                     or t - self.drop_since > 75:
                 self.drop_banned.add(self.drop_target)  # someone else is taking it, or it's taking too long
                 self.drop_target = None
@@ -172,7 +172,7 @@ class DropsMixin:
                 if dist > maxd or (d.get("lands_in", 0) <= 0 and eta > 25):
                     continue
                 if not self.drop_fight_ok(me, px, py, t):
-                    if not DROP_WAIT_CALM:
+                    if not self.wait_calm:
                         continue
                     eta += 1000.0  # a fight there: still a target (wait nearby for it to calm down), but last choice
                 if eta < be:
@@ -197,7 +197,7 @@ class DropsMixin:
                 st = best or nav.center(nav.nearest_main(px + 15.0, py))
                 self.drop_stage[self.drop_target] = st
             return st, 3.0, "DROPWAIT"
-        if DROP_WAIT_CALM and (d.get("holder") not in (None, me["id"]) or not self.drop_fight_ok(me, px, py, t)):
+        if self.wait_calm and (d.get("holder") not in (None, me["id"]) or not self.drop_fight_ok(me, px, py, t)):
             # a fight (or someone else's capture) at the drop: wait at cover nearby, hold fire, re-judge every
             # decision; the contest rules snipe or rush a lone capturer we'd beat
             cached = self.drop_watch.get(self.drop_target)

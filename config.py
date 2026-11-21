@@ -39,7 +39,18 @@ DROP_DANGER_S = 10.0   # ... in the last this many seconds (20 in the 2.98 build
 DROP_FIGHT = True      # ... unless it's one enemy we'd outlast: the capture refills our HP, so we only need to live
 DROP_WIN_R = 1.1       # fight odds (seconds until we die / seconds to kill it) needed to go for or contest a drop
                        # with an enemy there (contesting needed ~1.25 in the 2.98 build)
-DROP_WAIT_CALM = True  # a fight at the drop (2+ enemies, or one we wouldn't outlast, or someone else capturing):
+# ---- which match are we in? practice = the house squad (hunts only us, never fights itself); the final event =
+# a free-for-all against other teams' bots. Deaths we didn't cause (before the zone gets deadly) mean free-for-all.
+SITUATION = True
+SITUATION_UNTIL = 300.0   # only count deaths before this match time (later the zone kills too)
+SITUATION_CONFIRM_S = 1.0  # the extra deaths must stay unexplained this long (a kill event may arrive a tick late)
+# squad only: heal at cover between hunters (more come after each kill): (start below, heal up to) per phase;
+# no hunting while healing. None = use the phase rules (PHASES)
+SQUAD_HEAL = {"early": (0.6, 1.0), "mid": (0.75, 1.0), "late": (0.9, 1.0)}
+KILL_PILE = True       # (any match) our kill drops its cubes (+2) and weapons where it died: loot target right away
+
+DROP_WAIT_CALM = True  # FREE-FOR-ALL ONLY (vs the squad, 2+ enemies at a drop are hunters coming for us, not a fight):
+                       # a fight at the drop (2+ enemies, or one we wouldn't outlast, or someone else capturing):
                        # wait at cover nearby, hold fire unless shot, go in as soon as it's one we'd outlast or nobody
 DROP_WATCH_R = (35.0, 60.0)  # ... the waiting spot's distance from the drop (close enough to reach the ring in time)
 # ... by our role (playbook.our_role): (min m, max m from the drop, "hidden" from the fighters seen/heard there, or

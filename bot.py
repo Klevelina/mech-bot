@@ -93,6 +93,10 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         self.drop_banned = set()
         self.drop_stage = {}    # drop id -> where to wait for it
         self.drop_watch = {}    # drop id -> where to wait out a fight at it (DROP_WAIT_CALM)
+        self.situation = "squad"  # "squad" (house bots hunting only us) until other mechs die by others' hands: "ffa"
+        self.our_kills = 0
+        self.odd_deaths_t = None  # when more mechs had died than we killed (confirmed after SITUATION_CONFIRM_S)
+        self.wait_calm = False
         self.contest = None     # (goal, drop id) while contesting someone else's capture
         self.capturers = {}     # mech id -> last time it was capturing a drop (don't hunt into its full-HP payout)
         self.dmg_log = {}       # attacker id -> deque of (t, amount)
@@ -159,6 +163,18 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             self.nav.safe = (sc[0], sc[1], max(sr - 4.0, 5.0))
         self.aim.observe(t, obs["mechs"])
         self.style = self.loadout_style(weapons)
+        self.read_situation(obs, t)
+        if KILL_PILE:
+            for e in obs["events"]:
+                if e["type"] == "kill" and e.get("target") in self.epos:
+                    # its cubes (+2) and weapons drop where it died: a loot target right away, at the exact spot
+                    _, kp, _ = self.epos[e["target"]]
+                    self.mem.items[("kill", e["target"])] = {"kind": "pile", "x": kp[0], "y": kp[1], "z": kp[2],
+                                                             "seen": t, "cell": None, "ok": None}
+                    # it's dead: no longer a danger there (loot), nor a target for blind mortar shells
+                    self.enemies.pop(e["target"], None)
+                    self.epos.pop(e["target"], None)
+                    self.emodel.pos.pop(e["target"], None)
         self.big = POWER and me.get("cubes", 0) >= POWER_BIG_CUBES  # bigger mech, easier to hit: more careful
         if self.big and not getattr(self, "_was_big", False):
             self.zone_key = None  # just got big: re-pick a more enclosed cover spot now
@@ -191,6 +207,8 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
                                 "mid": (AGGRO_MID_HEAL if EARLY_AGGRO else
                                         (PHASE_MID_HEAL, 0.9) if group_weapon else (None, None)),
                                 "late": (PHASE_LATE_HEAL, 1.0)}[self.phase]
+        if SQUAD_HEAL and self.situation == "squad":
+            heal_lo, heal_hi = SQUAD_HEAL[self.phase]  # full HP before the next hunter comes
         if heal_lo is not None and not self.recovering and hp_frac < heal_lo and t - self.threat_t > 3.0:
             self.recovering = True
         elif self.recovering and (heal_hi is None or hp_frac >= heal_hi):
@@ -283,7 +301,7 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             stop_r = 3.0
             mode = self.fight_mode
         elif DROPS and self.nav is not None and (t - self.threat_t > 3.0 or (
-                DROP_WAIT_CALM and self.drop_target is not None and t - self.last_dmg_t > 3.0)) and \
+                self.wait_calm and self.drop_target is not None and t - self.last_dmg_t > 3.0)) and \
                 self._drop(obs, me, t):
             # (already going for a drop: enemies in sight don't stop it, only being hit does)
             g, stop_r, mode = self._drop_now
@@ -558,11 +576,29 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         mf.draw.point([gx, gy, z + 1], "#40c0ff", 8)
         for it in list(self.mem.items.values())[:20]:
             mf.draw.point([it["x"], it["y"], it["z"] + 1], "#ffd060", 4)
-        what = f"{mode} {self.style} k{self.aim.gk:.2f}"
+        what = f"{mode} {self.style} {self.situation} k{self.aim.gk:.2f}"
         mf.draw.label(f"hp {me['hp']:.0f} {what} d{dgoal:.0f} cubes {me['cubes']:.0f}"
                       f"{' tgt %d' % self.cur if self.cur is not None else ''}"
                       f"{' S' if self.unstick else ''}{' P' if self.search else ''}")
         return act
+
+    def read_situation(self, obs, t):
+        """Practice: house bots are a squad that never fights itself, so before the zone gets deadly every death is
+        one of our kills. More deaths than our kills (for SITUATION_CONFIRM_S, in case a kill event lags) means
+        bots are killing each other: a free-for-all against other players' bots. Once "ffa", it stays."""
+        self.our_kills += sum(1 for e in obs["events"] if e["type"] == "kill")
+        if SITUATION and self.situation == "squad":
+            dead = self.cfg["match"].get("mechs", 16) - obs["alive"]
+            if dead > self.our_kills and t < SITUATION_UNTIL:
+                if self.odd_deaths_t is None:
+                    self.odd_deaths_t = t
+                elif t - self.odd_deaths_t >= SITUATION_CONFIRM_S:
+                    self.situation = "ffa"
+                    mf.log(f"t={t:.1f} {dead} dead, {self.our_kills} by us: free-for-all")
+            else:
+                self.odd_deaths_t = None
+        # wait out fights at drops only where bots weaken each other
+        self.wait_calm = DROP_WAIT_CALM and self.situation == "ffa"
 
 
 if __name__ == "__main__":
