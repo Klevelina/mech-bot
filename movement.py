@@ -39,7 +39,8 @@ class MoveMixin:
                 if e is None:
                     e = self.expo[c] = nav.exposure(c)
                 n_open, face = e
-                expo_w = EXPO_W * (POWER_BIG_EXPO if getattr(self, "big", False) else 1.0)
+                expo_w = EXPO_W * (POWER_BIG_EXPO if getattr(self, "big", False) else 1.0) * \
+                    (SQUAD_CORNER_EXPO if SQUAD_CORNER and getattr(self, "situation", "") == "squad" else 1.0)
                 s += expo_w * n_open + (10.0 if n_open == 0 else 0.0)  # fully enclosed: can't see anyone coming
                 if s < bs:
                     best, bs, bface = c, s, face
