@@ -123,7 +123,7 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         weapons = me["weapons"]
         act: mf.Action = {"tick": obs["tick"]}
         if obs["offer"]:
-            act["pick"] = pick_upgrade(obs["offer"], me["weapons"])
+            act["pick"] = pick_upgrade(obs["offer"], me["weapons"], SQUAD_ALL_IN and self.situation == "squad")
 
         # ---- world model
         self.mem.update(obs)
@@ -234,7 +234,7 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
 
         # ---- loot target
         target = None
-        if LOOT and self.escape is None and t - self.threat_t > SAFE_AFTER:
+        if LOOT and self.escape is None and t - self.threat_t > (ALLIN_SAFE_S if self.all_in else SAFE_AFTER):
             if self.target is not None and (self.target not in self.mem.items or t - self.target_since > LOOT_GIVEUP_S):
                 if self.target in self.mem.items:
                     self.mem.banned.add(self.target)  # took too long
@@ -255,6 +255,9 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
                 skip = ()
                 if self.recovering:
                     md, skip = min(md, RECOVER_LOOT_DIST), ("crate", "npc")
+                if self.all_in:
+                    md = ALLIN_LOOT_R
+                    skip = ("npc",) if me["hp"] < ALLIN_DRONE_HP * me["max_hp"] else ()
                 tid, _ = self.mem.best_target(me, zone, weapons, late, md, lambda ix, iy: self.danger(ix, iy, t), skip,
                                               phase=self.phase,
                                               laser_seek=LASER_SEEK_R if (LASER_SEEK and self.all_in) else 0.0)
@@ -274,7 +277,7 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             foes = mechs + [m for m in obs["mechs"] if m["kind"] == "npc"
                             and t - self.npc_attackers.get(m["id"], -1e9) < 4.0]
         fight_m = self.pick_target(me, foes, t) if mechs else None
-        contesting = DROPS and CONTEST and self.nav is not None and self.escape is None and self._contest(obs, me, t)
+        contesting = DROPS and CONTEST and not (self.all_in and ALLIN_NO_DROPS) and self.nav is not None and self.escape is None and self._contest(obs, me, t)
         if contesting and self.contest[3] is not None:
             # sniping/contesting a capture: the capturer is the target, whoever else scores higher
             forced = next((m for m in mechs if m["id"] == self.contest[3]), None)
@@ -326,14 +329,14 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             dgoal = math.hypot(self.fight_goal[0] - x, self.fight_goal[1] - y)
             stop_r = 3.0
             mode = self.fight_mode
-        elif DROPS and self.nav is not None and (t - self.threat_t > 3.0 or (
+        elif DROPS and not (self.all_in and ALLIN_NO_DROPS) and self.nav is not None and (t - self.threat_t > 3.0 or (
                 self.wait_calm and self.drop_target is not None and t - self.last_dmg_t > 3.0)) and \
                 self._drop(obs, me, t):
             # (already going for a drop: enemies in sight don't stop it, only being hit does)
             g, stop_r, mode = self._drop_now
             self.set_goal(g, x, y)
             dgoal = math.hypot(g[0] - x, g[1] - y)
-        elif target is None and EXPLORE and safe and not self.recovering and t < EXPLORE_UNTIL and                 self.nav is not None and \
+        elif target is None and EXPLORE and not (self.all_in and ALLIN_NO_EXPLORE) and safe and not self.recovering and t < EXPLORE_UNTIL and                 self.nav is not None and \
                 self._explore(x, y, zone, t):
             gx, gy = self.explore_goal
             self.set_goal(self.explore_goal, x, y)

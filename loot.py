@@ -44,9 +44,13 @@ def upgrade_order(weapons):
     return UPGRADES_FOR[key] + UPGRADE_ORDER
 
 
-def pick_upgrade(offer, weapons=None):
+def pick_upgrade(offer, weapons=None, all_in=False):
     ids = [c["id"] for c in offer["choices"]]
     order = upgrade_order(weapons) if (UPGRADE_BY_LOADOUT and weapons is not None) else UPGRADE_ORDER
+    if all_in:
+        import config
+        laser = any(w and w["kind"] == "laser" for w in (weapons or []))
+        order = (config.ALLIN_UPGRADES_LASER if laser else config.ALLIN_UPGRADES) + order
     for want in order:
         if want in ids:
             return ids.index(want)
