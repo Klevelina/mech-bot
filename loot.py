@@ -1,11 +1,14 @@
 """Loot: remember items we have seen, pick what to go for, weapon swap rules, upgrade picks."""
 import math
 
+from config import LIGHTNING_FIRST
+
 # What a found item is worth before distance (rough "cubes" scale).
 VALUE = {"cube": 3.0, "crate": 2.5, "npc": 5.0}  # a drone drops 2 cubes
 # Upgrade picks, first available wins. Plating/armor/nanites keep us alive; the rest are fillers.
-UPGRADE_ORDER = ["plating", "armor", "nanites", "sensors",
-                 "lightning_efficiency", "laser_charge", "laser_damage", "lightning_range",
+# With LIGHTNING_FIRST, lightning's chain/range come right after plating/armor (only offered if we hold it).
+UPGRADE_ORDER = (["plating", "lightning_chain", "armor", "lightning_range", "nanites", "lightning_efficiency", "sensors"]
+                 if LIGHTNING_FIRST else ["plating", "armor", "nanites", "sensors", "lightning_efficiency"]) +                 ["laser_charge", "laser_damage", "lightning_range", "lightning_chain",
                  "gun_damage", "gun_rate", "gun_mag", "gun_velocity",
                  "servos", "capacitor", "reactor", "gyros", "jets"]
 SPECIALS = ("laser", "lightning")
@@ -41,7 +44,7 @@ def weapon_take(kind, weapons, late, fighting):
         return 1
     if s0 == "mortar":
         return 0
-    pref = "lightning" if late else "laser"
+    pref = "lightning" if (late or LIGHTNING_FIRST) else "laser"  # lightning chains through groups
     if late and s0 == "gun":
         return 0  # gun out, second special in
     if kind == pref and s1 in SPECIALS and s1 != pref:
@@ -128,6 +131,8 @@ class Memory:
                 if d is None:
                     continue
                 v = 5.0 if d == "empty" else 3.0
+                if LIGHTNING_FIRST and it["wkind"] == "lightning":
+                    v += 2.0
             else:
                 v = VALUE[k]
             ix, iy = it["x"], it["y"]
