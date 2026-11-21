@@ -11,6 +11,8 @@ during the flight, which tells us when a long shot isn't worth the ammo.
 """
 import math
 
+ACC_PRIOR = 20.0  # m/s^2 assumed for an enemy we haven't watched yet (mechs can do ~58)
+
 
 class AimLearner:
     def __init__(self):
@@ -26,7 +28,7 @@ class AimLearner:
         by_id = {m["id"]: m for m in mechs if m["kind"] == "mech"}
         for i, m in by_id.items():
             vx, vy = m["vel"][0], m["vel"][1]
-            a0, lv, lt = self.acc.get(i, (8.0, None, None))
+            a0, lv, lt = self.acc.get(i, (ACC_PRIOR, None, None))
             if lv is not None and 0.05 < t - lt < 0.5:
                 a = math.hypot(vx - lv[0], vy - lv[1]) / (t - lt)
                 a0 = 0.8 * a0 + 0.2 * min(a, 80.0)
@@ -68,7 +70,7 @@ class AimLearner:
 
     def surprise(self, i, tt):
         """How far (m) enemy i can stray from our prediction during a flight of tt seconds."""
-        a = self.acc.get(i, (8.0, None, None))[0]
+        a = self.acc.get(i, (ACC_PRIOR, None, None))[0]
         return 0.5 * a * tt * tt
 
     def record(self, t, m, tt):

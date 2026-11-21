@@ -31,6 +31,8 @@ LEARN_AIM = True       # learn per-enemy lead factor from where targets really w
 HOLD_DODGY = True      # don't spend gun ammo on long shots at targets that change direction a lot
 PLAYSTYLE = True       # move by loadout: gun keeps mid range, laser keeps long range, lightning ambushes
 DRONE_FARM = True      # shoot back at drones that shoot us, treat them as loot
+WEIGH_THREATS = True   # several attackers: fight the best trade, stand where the others can't see us
+HIDE_LOW_HP = 0.30     # below this HP fraction, under fire: hide from every attacker (0 = off)
 EXPLORE = True         # early, with nothing to loot: walk to unexplored areas to find loot
 EXPLORE_UNTIL = 100.0  # match time
 EXPLORE_BIN = 25.0     # m, size of the "have we looked here" bins
@@ -83,11 +85,18 @@ class Bot:
         self.fight_goal = None  # (x, y) where the playstyle wants us during a fight
         self.fight_goal_t = -1e9
         self.fight_goal_id = None
+        self.fight_mode = "FIGHTMOVE"
+        self.last_dmg_t = -1e9
         self.style = "gun"
         self.seen_bins = set()  # explored (bx, by) bins
         self.explore_goal = None
         self.explore_t = -1e9
         self.npc_attackers = {}  # drone id -> last time it hit us
+        self.dmg_log = {}       # attacker id -> deque of (t, amount)
+        self.active = []        # [(foe, its dps on us)] this decision
+        npc = cfg.get("npc", {})
+        self.npc_dps = npc.get("damage", 25) / max(0.1, npc.get("cooldown", 1.0))
+        self.wcfg = cfg.get("weapons", {})
 
     # ---------- goal selection
     def choose_cover(self, mx, my, zone):
@@ -176,14 +185,18 @@ class Bot:
         return out
 
     def hit_zoff(self, me, m):
-        """Height above the mech's feet we have a clear line of fire to (center, then upper body), or None."""
-        scale = 1.0 + self.size_per_cube * m.get("cubes", 0)
+        """Height above the target's feet we have a clear line of fire to (center, then upper body), or None."""
+        if m["kind"] == "npc":
+            zoffs = (1.75, 3.0)
+        else:
+            scale = 1.0 + self.size_per_cube * m.get("cubes", 0)
+            zoffs = (4.5 * scale, 7.5 * scale)
         if self.nav is None:
-            return 4.5 * scale
+            return zoffs[0]
         x, y, z = me["pos"]
         mz = z + me["stats"].get("muzzle_height", 7)
         p = m["pos"]
-        for zoff in (4.5 * scale, 7.5 * scale):
+        for zoff in zoffs:
             if self.nav.los(x, y, mz, p[0], p[1], p[2] + zoff):
                 return zoff
         return None
@@ -191,8 +204,83 @@ class Bot:
     def can_hit(self, me, m):
         return self.hit_zoff(me, m) is not None
 
+    # ---------- threat weighing
+    def threat_dps(self, m, d, t):
+        """Damage per second foe m does (or could do) to us: max of what we measured and an estimate."""
+        log = self.dmg_log.get(m["id"])
+        seen = sum(a for (ht, a) in log if t - ht < 3.0) / 3.0 if log else 0.0
+        if m["kind"] == "npc":
+            est = self.npc_dps * 0.7 if d < 90 else 0.0
+        else:
+            est = 0.0
+            for k in (m.get("weapons") or ["gun"]):
+                w = self.wcfg.get(k, {})
+                if k == "gun" and d < w.get("range", 230):
+                    est = max(est, 0.5 * w.get("damage", 45) / max(0.05, w.get("cooldown", 0.24)))
+                elif k == "lightning" and d < w.get("range", 45) + 5:
+                    est = max(est, w.get("damage", 60) / max(0.05, w.get("cooldown", 0.25)))
+                elif k == "laser" and d < w.get("range", 280):
+                    est = max(est, w.get("damage", 315) / (w.get("charge", 0.75) + w.get("cooldown", 1.65)))
+                elif k == "mortar" and d < 235:
+                    est = max(est, 0.4 * w.get("damage", 200) / max(0.1, w.get("cooldown", 2.0)))
+            attacking = t - self.attackers.get(m["id"], -1e9) < 4.0
+            est *= 1.0 if attacking else 0.5
+        return max(est, seen)
+
+    def our_dps(self, me, m, d, hittable):
+        """Damage per second we can expect to deal to foe m."""
+        if not hittable:
+            return 1.0
+        total = 0.0
+        npc = m["kind"] == "npc"
+        for w in me["weapons"]:
+            if not w:
+                continue
+            k, st = w["kind"], w["stats"]
+            if k == "gun" and d < st.get("range", 230):
+                if npc:
+                    p = 0.7
+                else:
+                    scale = 1.0 + self.size_per_cube * m.get("cubes", 0)
+                    s = self.aim.surprise(m["id"], d / max(1.0, st.get("speed", 252)))
+                    p = max(0.15, min(0.85, 1.0 - s / (5.0 * scale)))
+                total += p * st.get("damage", 45) / max(0.05, st.get("cooldown", 0.24))
+            elif k == "lightning" and d < st.get("range", 45) and me["energy"] > ENERGY_RESERVE_LATE:
+                total += st.get("damage", 60) / max(0.05, st.get("cooldown", 0.25))
+            elif k == "laser" and not npc and d < st.get("range", 280):
+                total += st.get("damage", 315) / (st.get("charge", 0.75) + st.get("cooldown", 1.65))
+        if not npc:
+            x, y = me["pos"][0], me["pos"][1]
+            if abs(wrap(math.atan2(y - m["pos"][1], x - m["pos"][0]) - m["aim"][0])) > math.pi / 2:
+                total *= self.cfg["mech"].get("rear_mult", 1.5)  # its back is to us
+        return max(total, 1.0)
+
+    def pick_target_weighted(self, me, foes, t):
+        """Fight whoever removes the most incoming damage per second of our shooting:
+        value = (its dps on us) / (time for us to kill it). Fills self.active with foes that threaten us."""
+        x, y = me["pos"][0], me["pos"][1]
+        best, bs = None, -1e18
+        self.active = []
+        for m in foes:
+            d = math.hypot(m["pos"][0] - x, m["pos"][1] - y)
+            tdps = self.threat_dps(m, d, t)
+            if t - self.attackers.get(m["id"], -1e9) < 4.0 or t - self.npc_attackers.get(m["id"], -1e9) < 4.0 \
+                    or (m["kind"] == "mech" and d < 200):
+                self.active.append((m, tdps))
+            hittable = self.can_hit(me, m)
+            hp = m.get("hp") or (350.0 if m["kind"] == "npc" else 1400.0)
+            ttk = hp / self.our_dps(me, m, d, hittable)
+            v = (tdps + 5.0) / ttk  # +5: a foe that isn't shooting yet is still worth something
+            if m["id"] == self.cur:
+                v *= 1.15  # don't flip-flop
+            if v > bs:
+                best, bs = m, v
+        return best
+
     def pick_target(self, me, mechs, t):
         x, y = me["pos"][0], me["pos"][1]
+        if WEIGH_THREATS:
+            return self.pick_target_weighted(me, mechs, t)
         if not SMART_TARGET:
             return min(mechs, key=lambda m: math.dist(m["pos"], me["pos"]))
         best, bs = None, -1e18
@@ -257,7 +345,8 @@ class Bot:
                 goal = self.nav.center(c)
             else:  # nothing hides us close by: run directly away
                 a = math.atan2(y - src[1], x - src[0])
-                goal = self.nav.center(self.nav.nearest_main(x + 40 * math.cos(a), y + 40 * math.sin(a)))
+                px, py = self.clamp_safe(x + 40 * math.cos(a), y + 40 * math.sin(a))
+                goal = self.nav.center(self.nav.nearest_main(px, py))
             self.escape = {"src": aid, "goal": goal, "t": t, "from": list(src)}
             mf.log(f"t={t:.1f} escape from {aid} at {src[0]:.0f},{src[1]:.0f},{src[2]:.0f} -> {goal[0]:.0f},{goal[1]:.0f}")
             return
@@ -282,7 +371,20 @@ class Bot:
             if math.hypot(cx - ex, cy - ey) > math.hypot(x - ex, y - ey) - 5:  # not toward it
                 return (cx, cy)
         a = math.atan2(y - ey, x - ex)
-        return nav.center(nav.nearest_main(x + dist * math.cos(a), y + dist * math.sin(a)))
+        px, py = self.clamp_safe(x + dist * math.cos(a), y + dist * math.sin(a))
+        return nav.center(nav.nearest_main(px, py))
+
+    def clamp_safe(self, px, py):
+        """Pull a point back inside the nav's safe circle (so running away never runs into the zone)."""
+        s = self.nav.safe if self.nav is not None else None
+        if s is None:
+            return px, py
+        sx, sy, sr = s
+        d = math.hypot(px - sx, py - sy)
+        if d <= sr - 2.0 or d < 1e-6:
+            return px, py
+        f = (sr - 2.0) / d
+        return sx + (px - sx) * f, sy + (py - sy) * f
 
     def update_fight_goal(self, me, m, t, t_start):
         """Where to stand against target m, by our loadout. None = keep the normal goal (cover)."""
@@ -299,6 +401,35 @@ class Bot:
         theirs = set(m.get("weapons") or [])
         hp_frac = me["hp"] / max(1.0, me["max_hp"])
         goal = None
+
+        if WEIGH_THREATS and self.active:
+            def eye(o):
+                return (o["pos"][0], o["pos"][1], o["pos"][2] + (3.0 if o["kind"] == "npc" else 8.0))
+            under_fire = t - self.last_dmg_t < 3.0
+            # low HP under fire: get out of everyone's sight and regenerate
+            # ... unless the target dies in ~2 s: finish it instead
+            hittable = self.can_hit(me, m)
+            ttk = (m.get("hp") or 1400.0) / self.our_dps(me, m, d, hittable)
+            if HIDE_LOW_HP and hp_frac < HIDE_LOW_HP and under_fire and not (hittable and ttk < 2.0):
+                c = self.nav.flank_cell([eye(o) for o, _ in self.active], None, x, y, 45.0, t_start + 0.010)
+                if c >= 0:
+                    self.fight_goal, self.fight_mode = self.nav.center(c), "HIDE"
+                    return
+            others = [(o, dps) for o, dps in self.active if o["id"] != m["id"] and dps > 0]
+            if others:
+                zc = m["pos"][2] + (1.75 if m["kind"] == "npc" else 4.5)
+                c = self.nav.flank_cell([eye(o) for o, _ in others], (ex, ey, zc), x, y, 40.0, t_start + 0.010)
+                if c >= 0:
+                    self.fight_goal, self.fight_mode = self.nav.center(c), "FLANK"
+                    return
+                # no spot does both: if another foe hurts us more than our target does, hide from that one
+                o, odps = max(others, key=lambda od: od[1])
+                tdps = next((dp for f, dp in self.active if f["id"] == m["id"]), 0.0)
+                if odps > tdps:
+                    self.fight_goal = self.away_goal(me, o["pos"][0], o["pos"][1], 30.0, t_start)
+                    self.fight_mode = "AVOID"
+                    return
+        self.fight_mode = "FIGHTMOVE"
         if self.style == "gun":
             # gun: keep mid range (leading works, lightning can't reach us)
             if d < 50 or ("lightning" in theirs and d < 65):
@@ -401,7 +532,17 @@ class Bot:
                 self.hits[e["target"]] = t
             if e["type"] == "damaged" and e.get("by") is not None and e["by"] >= 100:
                 self.npc_attackers[e["by"]] = t
+            if e["type"] == "damaged" and e.get("by") is not None:
+                self.last_dmg_t = t
+                self.dmg_log.setdefault(e["by"], deque(maxlen=40)).append((t, e.get("amount", 0)))
         self._t = t
+        if self.nav is not None:
+            # hiding spots must stay out of the zone: the current circle, or the next one once a shrink is near
+            if t >= zone["shrink_start"] - 10:
+                sc, sr = zone["next_center"], zone["next_radius"]
+            else:
+                sc, sr = zone["center"], zone["radius"]
+            self.nav.safe = (sc[0], sc[1], max(sr - 4.0, 5.0))
         self.aim.observe(t, obs["mechs"])
         self.style = self.loadout_style(weapons)
         self.mark_seen(x, y)
@@ -444,7 +585,12 @@ class Bot:
         # ---- what to walk to / stop near
         stop_r = 4.0
         shoot = None  # (pos, vel, zoff, size) of a crate/drone to shoot
-        fight_m = self.pick_target(me, mechs, t) if mechs else None
+        # foes: visible mechs, plus visible drones that are shooting us (so a drone isn't ignored mid-fight)
+        foes = mechs
+        if mechs and WEIGH_THREATS:
+            foes = mechs + [m for m in obs["mechs"] if m["kind"] == "npc"
+                            and t - self.npc_attackers.get(m["id"], -1e9) < 4.0]
+        fight_m = self.pick_target(me, foes, t) if mechs else None
         if fight_m is not None and self.escape is None:
             self.update_fight_goal(me, fight_m, t, t_start)
         elif not mechs:
@@ -460,7 +606,7 @@ class Bot:
             self.set_goal(self.fight_goal, x, y)
             dgoal = math.hypot(self.fight_goal[0] - x, self.fight_goal[1] - y)
             stop_r = 3.0
-            mode = "FIGHTMOVE"
+            mode = self.fight_mode
         elif target is None and EXPLORE and safe and t < EXPLORE_UNTIL and self.nav is not None and \
                 self._explore(x, y, zone, t):
             gx, gy = self.explore_goal
@@ -611,22 +757,24 @@ class Bot:
                 if i != m["id"]:
                     del self.fire_since[i]
             self.fire_since.setdefault(m["id"], t)
-            scale = 1.0 + self.size_per_cube * m.get("cubes", 0)
+            is_mech = m["kind"] == "mech"
+            scale = 1.0 + self.size_per_cube * m.get("cubes", 0) if is_mech else 1.0
+            size = 2.5 * scale if is_mech else 1.8
             laser_charging = any(w and w["kind"] == "laser" and w.get("charge", 0) > 0 for w in weapons)
             speed = 0.0 if (laser_charging or not LEAD) else self._gun_speed(me)  # laser is hitscan
             zoff = self.hit_zoff(me, m)
-            k = self.aim.lead(m["id"]) if LEARN_AIM else 1.0
+            k = self.aim.lead(m["id"]) if (LEARN_AIM and is_mech) else 1.0
             aim, h = self.aim_at(me, m["pos"], m["vel"], zoff if zoff is not None else 4.5 * scale, speed, k)
             act["aim"] = aim
             if zoff is not None:
                 tt = h / speed if speed else 0.0
                 gun_ok = True
-                if HOLD_DODGY and speed and h > 60:
+                if HOLD_DODGY and is_mech and speed and h > 60:
                     # long shot: only if it can't stray further than ~1.5 body radii during the flight
                     gun_ok = self.aim.surprise(m["id"], tt) < 2.5 * scale * 1.5
-                fire = self.fire(me, h, aim, 2.5 * scale, True, late, gun_ok)
+                fire = self.fire(me, h, aim, size, is_mech, late, gun_ok)
                 act["fire"] = fire
-                if LEARN_AIM and speed and any(f and w and w["kind"] == "gun" for f, w in zip(fire, weapons)):
+                if LEARN_AIM and is_mech and speed and any(f and w and w["kind"] == "gun" for f, w in zip(fire, weapons)):
                     self.aim.record(t, m, tt)
             e = m["pos"]
             mf.draw.line([x, y, z + 7], [e[0], e[1], e[2] + 4.5], "#ff5040")
