@@ -4,7 +4,7 @@
 LOOT = True            # go for items at all
 LOOT_UNTIL = 150.0     # match time after which we only loot items close by
 LOOT_LATE_DIST = 40.0  # ... "close by" after LOOT_UNTIL
-LOOT_MAX_DIST = 160.0
+LOOT_MAX_DIST = 110.0  # (160 in the 2.94 build) early-phase loot range
 SAFE_AFTER = 6.0       # s without seeing an enemy mech / being hit by one before looting again
 DANGER_R = 130.0       # skip items this close to where an enemy mech was seen recently
 DANGER_S = 25.0        # ... "recently"
@@ -23,7 +23,7 @@ DRONE_FARM = True      # shoot back at drones that shoot us, treat them as loot
 WEIGH_THREATS = True   # several attackers: fight the best trade, stand where the others can't see us
 HIDE_LOW_HP = 0.30     # below this HP fraction, under fire: hide from every attacker (0 = off)
 EXPLORE = True         # early, with nothing to loot: walk to unexplored areas to find loot
-EXPLORE_UNTIL = 100.0  # match time
+EXPLORE_UNTIL = 70.0   # match time (100 in the 2.94 build)
 EXPLORE_BIN = 25.0     # m, size of the "have we looked here" bins
 FIELD = False          # in fights, stand where (expected damage taken) - (expected damage dealt) is lowest
 FIELD_H = 3.0          # ... over this many seconds
@@ -103,3 +103,24 @@ LASER_LEAD_S = 0.1     # laser fires on our next decision: aim where the target 
 LIGHTNING_CLUSTER = True  # with lightning: prefer targets with other enemies within chain range
 OPEN_WATCH = True      # parked in the open (8+ of 12 directions) with enemies around: sweep the torso wider
 UPGRADE_BY_LOADOUT = True  # upgrade order depends on what we carry (loot.UPGRADES_FOR)
+
+# ---- early picks, then hide and heal: hunt weaker enemies only in the early phase, never after; heal more mid game
+EARLY_AGGRO = True
+AGGRO_HP = 0.5         # early: hunt while our HP is above this (instead of HUNT_HP)
+AGGRO_CLEAR_R = 80.0   # early: hunt only if no other enemy was seen/heard this close to us in 10 s (normally 150 m)
+AGGRO_WEAKER = 0.9     # "weaker" target: its HP at most this x ours, or its back is turned to us
+AGGRO_FINISH_HP = 0.4  # early: chase a fleeing enemy below this HP fraction (normally FINISH_HP)
+AGGRO_MID_HEAL = (0.7, 1.0)  # mid game, any loadout: heal below 70% up to full (late game keeps 90% -> full)
+
+# ---- fight odds: (seconds until we die to everyone shooting us) / (seconds for us to kill the target); >1 = we win
+FIGHT_ODDS = True
+FIGHT_WIN_R = 1.5      # start a hunt only with odds at least this good (judged at the hunt distance)
+FIGHT_LOSE_R = 0.8     # being shot with odds below this: back off out of sight (unless the target dies within 2 s)
+DISENGAGE_R = 35.0     # ... only to a spot hidden from every visible enemy within this many metres (boost-run there);
+                       #     none that close: stay and fight (running in the open only gets us shot longer)
+
+# ---- faster looting
+LOOT_GIVEUP_S = 15.0   # give up on an item after this long (was 40 s)
+LOOT_CRATE_SHOOT_R = 90.0  # start shooting a visible crate this far away, while still walking (was 60 m)
+LOOT_BOOST = True      # boost-run on loot trips and exploring longer than 15 m ...
+LOOT_BOOST_E = 55.0    # ... while energy is above this (keeps the rest for fights and escapes)
