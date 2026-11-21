@@ -19,9 +19,10 @@ from senses import SensesMixin
 from drops import DropsMixin
 from fight import FightMixin
 from evade import EvadeMixin
+from roof import RoofMixin
 
 
-class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin):
+class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, RoofMixin):
     name = "mech-fight"
 
     def __init__(self, hello: mf.Hello):
@@ -77,6 +78,17 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin):
         self.finish = None      # [enemy id, keep-chasing-until t, last pos] for a fleeing low-HP enemy
         self.finish_m = None
         self.finish_now = None
+        self.roofs = []
+        if ROOF and self.nav is not None:
+            try:
+                self.roofs = self.nav.find_roofs(deadline=time.perf_counter() + 4.0)
+            except Exception:
+                mf.log("roof analysis failed: " + traceback.format_exc())
+        self.roof_plan = None
+        self.roof_next = None
+        self.roof_leave_t = None
+        self.roof_key = None
+        self.climb_t = None
         self.snd_i = 0
         self.drop_target = None
         self.drop_since = 0.0
@@ -157,6 +169,12 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin):
         late = obs["alive"] <= 5 or zone["next_radius"] <= 70
         self.late_zone = LATE_GAME and zone["next_radius"] <= LATE_RADIUS
         self.update_escape(me, mechs, t, t_start)
+        roof = self.roof_step(me, zone, t)
+        roof_hold = roof is not None and roof[2] in ("ROOF", "CLIMB", "CHARGE")
+        if roof_hold:
+            self.escape = None  # on the roof (or going up): stay, shoot what gets a line on us
+        if roof is None or roof[2] != "CLIMB":
+            self.climb_t = None
 
         # ---- cover goal for the current circle
         key = (round(zone["next_center"][0], 1), round(zone["next_center"][1], 1), round(zone["next_radius"], 1))
@@ -214,11 +232,20 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin):
             self.fight_goal = None
             self.fight_goal_id = None
         safe = t - self.threat_t > SAFE_AFTER
-        if self.escape is not None:
+        if roof_hold:
+            g, stop_r, mode = roof[0], roof[1], roof[2]
+            self.set_goal(g, x, y)
+            dgoal = math.hypot(g[0] - x, g[1] - y)
+            self.fight_goal = None
+        elif self.escape is not None:
             self.set_goal(self.escape["goal"], x, y)
             dgoal = math.hypot(self.escape["goal"][0] - x, self.escape["goal"][1] - y)
             stop_r = 1.5
             mode = "ESCAPE"
+        elif roof is not None and ROOF_RUSH:  # walking to the foot of the roof's wall
+            g, stop_r, mode = roof[0], roof[1], roof[2]
+            self.set_goal(g, x, y)
+            dgoal = math.hypot(g[0] - x, g[1] - y)
         elif contesting:
             g = self.contest[0]
             self.set_goal(g, x, y)
@@ -236,6 +263,10 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin):
             dgoal = math.hypot(self.fight_goal[0] - x, self.fight_goal[1] - y)
             stop_r = 3.0
             mode = self.fight_mode
+        elif roof is not None:  # walking to the foot of the roof's wall (low priority)
+            g, stop_r, mode = roof[0], roof[1], roof[2]
+            self.set_goal(g, x, y)
+            dgoal = math.hypot(g[0] - x, g[1] - y)
         elif DROPS and self.nav is not None and t - self.threat_t > 3.0 and self._drop(obs, me, t):
             g, stop_r, mode = self._drop_now
             self.set_goal(g, x, y)
@@ -323,15 +354,26 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin):
                 move = [dx / d, dy / d]
         moving = move != [0.0, 0.0]
         jinking, extra_boost = self.evade(obs, me, move, t)
-        if jinking:
+        if jinking and not roof_hold:
             move = jinking
+        climbing = roof_hold and mode in ("CLIMB", "CHARGE")
+        if climbing:
+            move = list(roof[3])
 
         # ---- stuck detection
         self.hist.append((t, x, y))
         jump = False
         boost = not me["in_zone"] or (self.escape is not None and me["energy"] > 30) or extra_boost or \
             (mode == "CONTEST" and dgoal > 6.0 and me["energy"] > 40) or             (mode == "FINISH" and dgoal > 8.0 and me["energy"] > 30)
-        if self.unstick > 0:
+        if roof is not None and mode in ("TO_ROOF", "CHARGE"):
+            boost = boost and not me["in_zone"]  # save energy for the climb
+        if climbing or (roof_hold and not me["grounded"]):
+            self.hist.clear()  # vertical progress only: don't let the stuck detector fire
+            self.unstick = 0
+        if climbing:
+            jump = mode == "CLIMB" and me["grounded"]
+            boost = mode == "CLIMB" and not me["grounded"]  # in the air, boost = jets
+        elif self.unstick > 0:
             self.unstick -= 1
             boost = True
             jump = me["grounded"]
