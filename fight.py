@@ -243,7 +243,7 @@ class FightMixin:
         x, y, z = me["pos"]
         if self.escape is not None:
             src = self.escape["src"]
-            hold = LASER_HOLD_S if self.escape.get("laser") else 4.0
+            hold = LASER_HOLD_S if self.escape.get("laser") else ESCAPE_END_S
             came = None
             if self.escape.get("laser"):
                 came = next((m for m in mechs if m["id"] == src and self.can_hit(me, m) and
