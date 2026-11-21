@@ -527,7 +527,8 @@ class FightMixin:
                 lo, hi = band(our_role(me["weapons"]), m.get("weapons"))
                 pref = max(15.0, (lo + hi) / 2.0)
             capturing = t - self.capturers.get(m["id"], -1e9) < 3.0  # about to be healed by a drop
-            winning = not FIGHT_ODDS or self.fight_odds(me, m, t, at=pref) >= FIGHT_WIN_R
+            unaware = VANISH and self.is_unaware(m, t)  # lost us after a vanish, back to us: ambush it
+            winning = not FIGHT_ODDS or self.fight_odds(me, m, t, at=pref) >= (UNAWARE_WIN_R if unaware else FIGHT_WIN_R)
             if n_visible == 1 and not others_on_us and not capturing and d > pref + 10.0 and winning:
                 # low on ammo (or reloading): reload first, then go in
                 g = next((w for w in me["weapons"] if w and w["kind"] == "gun"), None)

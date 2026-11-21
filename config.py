@@ -47,6 +47,22 @@ SITUATION_CONFIRM_S = 1.0  # the extra deaths must stay unexplained this long (a
 # squad only: heal at cover between hunters (more come after each kill): (start below, heal up to) per phase;
 # no hunting while healing. None = use the phase rules (PHASES)
 SQUAD_HEAL = {"early": (0.6, 1.0), "mid": (0.75, 1.0), "late": (0.9, 1.0)}
+# ---- vanish when surrounded (stealth.py): 2+ known enemies within VANISH_R and under fire -> run to a spot none
+# of them can see, go silent (walk < 5 m/s, no boost, hold fire), heal; after VANISH_HOLD_S unseen judge whether they
+# lost us. Still tracked twice in a row -> no more vanishing this match. Lost us -> those enemies are ambush targets.
+VANISH = True
+VANISH_R = 120.0       # "surrounded": this many m
+VANISH_SPOT_R = 50.0   # hiding spot within this far
+VANISH_HOLD_S = 6.0    # unseen this long (vision memory is 5 s) before judging
+VISION_MEM_S = 5.0     # enemies' vision memory (config vision.memory_s)
+VANISH_MAX_S = 30.0    # give up after this long in any case (healing while hidden included)
+VANISH_LOSE_R = 1.0    # also vanish from a LONE attacker we're losing to (fight odds below this; DISENGAGE is 0.8)
+VANISH_AFTER_KILL_S = 1.5  # also vanish right after a kill if another enemy is known within VANISH_R (no damage needed)
+VANISH_HEAL_TO = 0.9   # they lost us: stay hidden and silent until this HP fraction (or VANISH_MAX_S)
+VANISH_WALK = 0.38     # move length while hidden: 0.38 x 11.7 m/s = 4.4 m/s, under the 5 m/s footstep speed
+VANISH_GIVEUP = 2      # tracked through it this many times in a row: stop vanishing
+UNAWARE_S = 12.0       # an enemy that lost us stays an ambush target this long ...
+UNAWARE_WIN_R = 1.0    # ... hunted at these odds (FIGHT_WIN_R otherwise; its back is x1.5 damage already)
 KILL_PILE = True       # (any match) our kill drops its cubes (+2) and weapons where it died: loot target right away
 
 DROP_WAIT_CALM = True  # FREE-FOR-ALL ONLY (vs the squad, 2+ enemies at a drop are hunters coming for us, not a fight):
