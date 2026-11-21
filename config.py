@@ -47,11 +47,7 @@ SITUATION_CONFIRM_S = 1.0  # the extra deaths must stay unexplained this long (a
 # squad only: heal at cover between hunters (more come after each kill): (start below, heal up to) per phase;
 # no hunting while healing. None = use the phase rules (PHASES)
 SQUAD_HEAL = {"early": (0.6, 1.0), "mid": (0.75, 1.0), "late": (0.9, 1.0)}
-SQUAD_CORNER = True    # squad only: within SQUAD_CORNER_R of our cover corner, fight from it: no hunting out, no
-                       # backing off to a distance band, no flanking out of it (hide/disengage/escape still work)
-SQUAD_CORNER_R = 40.0
-SQUAD_CORNER_EXPO = 1.5  # ... and pick cover with fewer open directions (open directions count this much more)
-KILL_PILE = True      # (any match) our kill drops its cubes (+2) and weapons where it died: loot target right away
+KILL_PILE = True       # (any match) our kill drops its cubes (+2) and weapons where it died: loot target right away
 
 DROP_WAIT_CALM = True  # FREE-FOR-ALL ONLY (vs the squad, 2+ enemies at a drop are hunters coming for us, not a fight):
                        # a fight at the drop (2+ enemies, or one we wouldn't outlast, or someone else capturing):

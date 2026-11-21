@@ -509,11 +509,6 @@ class FightMixin:
             hunt_ok = aggro and hp_frac > AGGRO_HP and self.weaker(me, m)
         if SQUAD_HEAL and getattr(self, "situation", "") == "squad" and self.recovering:
             hunt_ok = False  # healing between hunters: let the next one come to us, don't go looking
-        # squad: they share vision and come to us anyway - fight them from our corner (one open side, no crossfire)
-        dcov = math.hypot(self.cover[0] - x, self.cover[1] - y) if self.cover is not None else 1e9
-        corner = SQUAD_CORNER and getattr(self, "situation", "") == "squad" and dcov < SQUAD_CORNER_R
-        if corner:
-            hunt_ok = False
         else:
             hunt_ok = hp_frac > HUNT_HP
         if HUNT and m["kind"] == "mech" and hunt_ok and not self.late_zone:
@@ -577,7 +572,7 @@ class FightMixin:
             # only foes actually shooting us count as "others" to hide from
             others = [(o, dps) for o, dps in self.active if o["id"] != m["id"] and dps > 0 and
                       (t - self.attackers.get(o["id"], -1e9) < 4.0 or t - self.npc_attackers.get(o["id"], -1e9) < 4.0)]
-            if others and not (corner and dcov < 10.0):  # in our corner: hold it, don't flank out into the open
+            if others:
                 zc = m["pos"][2] + (1.75 if m["kind"] == "npc" else 4.5)
                 c = self.nav.flank_cell([eye(o) for o, _ in others], (ex, ey, zc), x, y, 40.0, t_start + 0.010)
                 if c >= 0:
@@ -591,10 +586,6 @@ class FightMixin:
                     self.fight_mode = "AVOID"
                     return
         self.fight_mode = "FIGHTMOVE"
-        if corner:
-            self.fight_goal = None  # go to / hold the corner (no backing off into the open to keep a distance band)
-            self.fight_mode = "CORNER"
-            return
         if PLAYBOOK and m["kind"] == "mech":
             # too close for this matchup -> back off to the band (behind cover if one is near)
             lo, hi = band(our_role(me["weapons"]), theirs)
