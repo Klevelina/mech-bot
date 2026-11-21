@@ -5,6 +5,7 @@ import time
 import mechfight as mf
 from config import *  # noqa: F401,F403  (switches and tuning numbers)
 from util import wrap  # noqa: F401
+from playbook import our_role
 
 
 class DropsMixin:
@@ -15,7 +16,8 @@ class DropsMixin:
         and we'd win the fight at ring distance. Returns the ring center or None."""
         x, y = me["pos"][0], me["pos"][1]
         hp_frac = me["hp"] / max(1.0, me["max_hp"])
-        if hp_frac < CONTEST_MIN_HP:
+        # late (5 or fewer alive / small circle): contest only with the old 50% floor, no low-HP dives into a crossfire
+        if hp_frac < (CONTEST_MIN_HP_LATE if getattr(self, "phase", "") == "late" else CONTEST_MIN_HP):
             return None
         st = me["stats"]
         speed = st.get("boost_speed", 19.5) if me["energy"] > 40 else st.get("walk_speed", 11.7)
@@ -47,8 +49,9 @@ class DropsMixin:
                 continue
             # anyone else around the drop? then it's a brawl: keep our HP
             crowded = False
+            cwin = 3.0 if (DROP_WAIT_CALM and dist < 70.0) else 10.0  # watching from close by: what's there now
             for key, (et, qx, qy) in self.enemies.items():
-                if key != holder and t - et < 10.0 and math.hypot(qx - px, qy - py) < 80.0:
+                if key != holder and t - et < cwin and math.hypot(qx - px, qy - py) < 80.0:
                     if isinstance(key, tuple) and holder in self.emodel.pos and \
                             math.hypot(qx - self.emodel.pos[holder][1][0], qy - self.emodel.pos[holder][1][1]) < 40:
                         continue  # a sound from the holder itself
@@ -61,10 +64,75 @@ class DropsMixin:
                               "aim": [math.atan2(y - py, x - px), 0.0]}  # unseen: assume it faces us
             ours = self.our_dps(me, pseudo, 6.0, True)
             theirs = max(1.0, self.emodel.dps_at(holder, 6.0, t))
-            if their_hp / ours < 0.8 * me["hp"] / theirs:
+            # odds = (seconds until we die) / (seconds to kill it); the drop refills our HP, so outlasting it is enough
+            if (me["hp"] / theirs) / max(0.1, their_hp / ours) >= DROP_WIN_R:
                 c = self.nav.nearest_main(px, py)
                 return self.nav.center(c), d["id"], "CONTEST", holder
         return None
+
+    def watch_spot(self, me, d, t):
+        """Where to wait out a fight at drop d, by our weapons (DROP_WATCH_BANDS): a cover spot in that distance
+        band from the drop, hidden from every fighter we saw or heard there - or, holding a laser, one with a
+        clear line to the drop so we can snipe whoever captures. Nearest such spot to us."""
+        nav = self.nav
+        x, y = me["pos"][0], me["pos"][1]
+        px, py, pz = d["pos"]
+        lo, hi, need = DROP_WATCH_BANDS.get(our_role(me["weapons"]), (DROP_WATCH_R[0], DROP_WATCH_R[1], "hidden"))
+        eyes = []
+        for k, (et, qx, qy) in self.enemies.items():
+            if t - et < 5.0 and math.hypot(qx - px, qy - py) < DROP_DANGER_R + 20.0:
+                st = self.emodel.pos.get(k) if not isinstance(k, tuple) else None
+                qz = st[1][2] if st else nav.ground_z(qx, qy)
+                eyes.append((qx, qy, qz + 8.0))
+        deadline = time.perf_counter() + 0.010
+        first = None
+        for extra in (0.0, 25.0, 50.0):  # nothing suitable in our band: look a little further out
+            band = sorted((math.hypot(cx - x, cy - y), cx, cy) for c, cx, cy in nav.cover
+                          if lo < math.hypot(cx - px, cy - py) < hi + extra and nav.in_safe(c))  # never outside the zone
+            if band and first is None:
+                first = (band[0][1], band[0][2])
+            for _, cx, cy in band[:40]:
+                if time.perf_counter() > deadline:
+                    break
+                top = nav.surf[nav.cell_of(cx, cy)] + 8.5
+                if need == "los":
+                    if nav.los(cx, cy, top - 0.5, px, py, pz + 4.5):
+                        return (cx, cy)
+                elif not any(nav.los(ex, ey, ez, cx, cy, top) for ex, ey, ez in eyes):
+                    return (cx, cy)
+        if first is not None:
+            return first  # nothing suitable found in time: the nearest cover spot in the band
+        a = math.atan2(y - py, x - px)
+        return nav.center(nav.nearest_main(px + hi * math.cos(a), py + hi * math.sin(a)))
+
+    def drop_fight_ok(self, me, px, py, t):
+        """Enemies seen/heard near the drop recently: go anyway if it's one enemy we'd outlast (the capture refills
+        our HP, so losing HP doesn't matter as long as we live). Two or more: a brawl, skip."""
+        x, y = me["pos"][0], me["pos"][1]
+        # watching from close by we see/hear what's there now: only the last 3 s count (a dead brawler drops out)
+        win = 3.0 if (DROP_WAIT_CALM and math.hypot(px - x, py - y) < 70.0) else DROP_DANGER_S
+        near = [(k, qx, qy) for k, (et, qx, qy) in self.enemies.items()
+                if t - et < win and math.hypot(qx - px, qy - py) < DROP_DANGER_R]
+        if not near:
+            return True
+        if not DROP_FIGHT or getattr(self, "phase", "") == "late":  # late: no fighting over drops (crossfire)
+            return False
+        mechs = [(k, qx, qy) for k, qx, qy in near if not isinstance(k, tuple)]
+        # sounds within 40 m of a mech we saw there are that mech's own
+        sounds = [(k, qx, qy) for k, qx, qy in near if isinstance(k, tuple) and
+                  not any(math.hypot(qx - mx, qy - my) < 40.0 for _, mx, my in mechs)]
+        if len(mechs) + (1 if sounds else 0) > 1:
+            return False
+        if mechs:
+            i = mechs[0][0]
+            st = self.emodel.pos.get(i)
+            pos = list(st[1]) if st else [mechs[0][1], mechs[0][2], 0.0]
+            hp = self.emodel.hp.get(i, 1400.0)
+        else:  # only heard: an unknown mech at full HP
+            i, pos, hp = sounds[0][0], [sounds[0][1], sounds[0][2], 0.0], 1400.0
+        pseudo = {"id": i, "kind": "mech", "pos": pos, "cubes": 0, "hp": hp,
+                  "aim": [math.atan2(y - pos[1], x - pos[0]), 0.0]}  # assume it faces us
+        return self.fight_odds(me, pseudo, t, at=30.0) >= DROP_WIN_R
 
     def _contest(self, obs, me, t):
         self.contest = self.contest_goal(obs, me, t)
@@ -84,7 +152,10 @@ class DropsMixin:
             d = drops.get(self.drop_target)
             if d is None:
                 self.drop_target = None  # captured (by us or someone else)
-            elif (d.get("holder") not in (None, me["id"]) and d.get("progress", 0) > 0.5) or t - self.drop_since > 75:
+            elif self.late_zone and d.get("holder") != me["id"]:
+                self.drop_target = None  # the final small circle started: drop it (unless we're capturing it now)
+            elif (not DROP_WAIT_CALM and d.get("holder") not in (None, me["id"]) and d.get("progress", 0) > 0.5) \
+                    or t - self.drop_since > 75:
                 self.drop_banned.add(self.drop_target)  # someone else is taking it, or it's taking too long
                 self.drop_target = None
         if self.drop_target is None and t - self.drop_check_t > 1.0:
@@ -100,8 +171,10 @@ class DropsMixin:
                 eta = dist * 1.3 / walk
                 if dist > maxd or (d.get("lands_in", 0) <= 0 and eta > 25):
                     continue
-                if self.danger(px, py, t, DROP_DANGER_R, 20.0):
-                    continue
+                if not self.drop_fight_ok(me, px, py, t):
+                    if not DROP_WAIT_CALM:
+                        continue
+                    eta += 1000.0  # a fight there: still a target (wait nearby for it to calm down), but last choice
                 if eta < be:
                     best, be = d["id"], eta
             if best is not None:
@@ -119,10 +192,17 @@ class DropsMixin:
                 best, bd = None, 35.0
                 for c, cx, cy in nav.cover:
                     dd = math.hypot(cx - px, cy - py)
-                    if 10.0 < dd < bd:
+                    if 10.0 < dd < bd and nav.in_safe(c):
                         best, bd = (cx, cy), dd
                 st = best or nav.center(nav.nearest_main(px + 15.0, py))
                 self.drop_stage[self.drop_target] = st
             return st, 3.0, "DROPWAIT"
+        if DROP_WAIT_CALM and (d.get("holder") not in (None, me["id"]) or not self.drop_fight_ok(me, px, py, t)):
+            # a fight (or someone else's capture) at the drop: wait at cover nearby, hold fire, re-judge every
+            # decision; the contest rules snipe or rush a lone capturer we'd beat
+            cached = self.drop_watch.get(self.drop_target)
+            if cached is None or t - cached[1] > 2.0:  # fighters move: re-check the spot every 2 s
+                cached = self.drop_watch[self.drop_target] = (self.watch_spot(me, d, t), t)
+            return cached[0], 3.0, "DROPWATCH"
         c = nav.nearest_main(px, py)
         return nav.center(c), d.get("radius", 8.0) * 0.4, "DROP"

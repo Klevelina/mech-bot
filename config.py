@@ -34,9 +34,22 @@ SOUNDS = True          # face suspicious sounds, treat nearby movement as a thre
 SOUND_FACE_S = 2.5     # how long to keep facing a sound
 DROPS = True           # go for supply drops when it looks safe
 DROP_MAX_DIST = 220.0  # m (x1.3 when HP is below half)
-DROP_DANGER_R = 100.0  # skip a drop if an enemy was seen/heard this close to it in the last 20 s
+DROP_DANGER_R = 60.0   # skip a drop if an enemy was seen/heard this close to it ... (100 in the 2.98 build)
+DROP_DANGER_S = 10.0   # ... in the last this many seconds (20 in the 2.98 build)
+DROP_FIGHT = True      # ... unless it's one enemy we'd outlast: the capture refills our HP, so we only need to live
+DROP_WIN_R = 1.1       # fight odds (seconds until we die / seconds to kill it) needed to go for or contest a drop
+                       # with an enemy there (contesting needed ~1.25 in the 2.98 build)
+DROP_WAIT_CALM = True  # a fight at the drop (2+ enemies, or one we wouldn't outlast, or someone else capturing):
+                       # wait at cover nearby, hold fire unless shot, go in as soon as it's one we'd outlast or nobody
+DROP_WATCH_R = (35.0, 60.0)  # ... the waiting spot's distance from the drop (close enough to reach the ring in time)
+# ... by our role (playbook.our_role): (min m, max m from the drop, "hidden" from the fighters seen/heard there, or
+# "los" = a clear line to the drop for sniping the capturer)
+DROP_WATCH_BANDS = {"gun": (35.0, 60.0, "hidden"), "brawler": (25.0, 45.0, "hidden"),
+                    "artillery": (40.0, 100.0, "hidden"), "sniper": (80.0, 160.0, "los"),
+                    "hybrid": (80.0, 160.0, "los")}
 CONTEST = True         # one mech capturing a drop, we reach the ring before it finishes and would win: go in
-CONTEST_MIN_HP = 0.5   # ... only above this HP fraction
+CONTEST_MIN_HP = 0.25  # ... only above this HP fraction (0.5 in the 2.98 build; the fight odds cover the rest)
+CONTEST_MIN_HP_LATE = 0.5  # ... in the late phase (5 or fewer alive, or a small circle): the old floor
 CONTEST_MAX_DIST = 80.0  # ... and only this close (less open ground to cross); sniping has no distance limit
 PARK_EXPOSURE = True   # park in corners/alcoves (few open directions) and face the open side
 EXPO_W = 6.0           # m of extra walking we accept per open direction avoided (of 12)
@@ -137,6 +150,8 @@ POWER_BIG_CUBES = 5    # from this many cubes (25% bigger, easier to hit):
 POWER_BIG_EXPO = 2.0   # ... cover spots: open directions count this much more (more enclosed corners)
 POWER_BIG_HIDE_HP = 0.45  # ... under fire, hide from everyone below this HP (normally HIDE_LOW_HP 0.30)
 POWER_BIG_LOSE_R = 1.0    # ... leave a fight (to cover within DISENGAGE_R) below these odds (normally 0.8)
+POWER_MORE = True      # more cubes: drones keep their POWER value/range in the mid game too, crates worth more
+POWER_CRATE_V = 4.0    # ... a crate (1 cube + 50% weapon; was 2.5, a cube is 3); supply drops: see DROP_DANGER_R/_S
 
 # ---- faster looting
 LOOT_GIVEUP_S = 15.0   # give up on an item after this long (was 40 s)
