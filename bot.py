@@ -80,6 +80,8 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         self.finish_now = None
         self.want_reload = False  # set by hunting: reload before going in
         self.recovering = False   # healing up after a fight (see RECOVER / PHASES)
+        self.base_pick_t = -1e9   # last time the home base was (re)chosen
+        self.ambush_t = None      # when the current ambush at the base started
         self.phase = "early"
         self.open_here = 0        # open directions (of 12) at our current spot, refreshed now and then
         self.open_t = -1e9
@@ -191,8 +193,10 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
 
         # ---- cover goal for the current circle
         key = (round(zone["next_center"][0], 1), round(zone["next_center"][1], 1), round(zone["next_radius"], 1))
-        if key != self.zone_key:
+        if key != self.zone_key or (BASE and self.phase == "early" and not fighting and not mechs and
+                                    t - self.base_pick_t > BASE_REPICK_S):
             self.zone_key = key
+            self.base_pick_t = t
             self.cover = self.choose_cover(x, y, zone)
 
         # ---- loot target
@@ -218,7 +222,13 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
                 skip = ()
                 if self.recovering:
                     md, skip = min(md, RECOVER_LOOT_DIST), ("crate", "npc")
-                tid, _ = self.mem.best_target(me, zone, weapons, late, md, lambda ix, iy: self.danger(ix, iy, t), skip)
+                base = self.cover if BASE else None
+
+                def bad_spot(ix, iy, base=base):
+                    if base is not None and math.hypot(ix - base[0], iy - base[1]) > BASE_LOOT_R + 10.0:
+                        return True  # short trips from the base only
+                    return self.danger(ix, iy, t)
+                tid, _ = self.mem.best_target(me, zone, weapons, late, md, bad_spot, skip)
                 if tid != self.target:
                     self.target, self.target_since = tid, t
             if self.target is not None:
@@ -471,9 +481,12 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             if zoff is not None:
                 tt = h / speed if speed else 0.0
                 gun_ok = True
+                if BASE_AMBUSH and is_mech and self.at_base(me) and h > AMBUSH_FIRE_R and \
+                        t - self.attackers.get(m["id"], -1e9) > 3.0:
+                    gun_ok = False  # ambush: let it walk into the range where the gun lands ~100%
                 if HOLD_DODGY and is_mech and speed and h > 60:
                     # long shot: only if it can't stray further than ~1.5 body radii during the flight
-                    gun_ok = self.aim.surprise(m["id"], tt) < 2.5 * scale * 1.5
+                    gun_ok = gun_ok and self.aim.surprise(m["id"], tt) < 2.5 * scale * 1.5
                 fire = self.fire(me, h, aim, size, is_mech, late, gun_ok)
                 if self.late_zone and is_mech and not self.late_fire_ok(me, m, h, t):
                     fire = [False, False]  # late: keep regenerating, don't start fights we can't end fast

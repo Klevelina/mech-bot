@@ -32,6 +32,15 @@ class MoveMixin:
             return nav.center(nav.nearest_main(nc[0], nc[1]))
         cands.sort()
         best, bs, bface = cands[0][1], 1e18, None
+        loot_pts = []
+        if BASE and getattr(self, "mem", None) is not None:
+            from loot import VALUE
+            for i, it in self.mem.items.items():
+                if i in self.mem.banned:
+                    continue
+                v = VALUE.get(it["kind"], 4.0 if it["kind"] == "pickup" else 0.0)
+                if v > 0:
+                    loot_pts.append((it["x"], it["y"], v))
         if PARK_EXPOSURE:
             # among the closest candidates, prefer corners/alcoves: few directions an enemy can see us from
             for s, c in cands[:60]:
@@ -40,6 +49,11 @@ class MoveMixin:
                     e = self.expo[c] = nav.exposure(c)
                 n_open, face = e
                 s += EXPO_W * n_open + (10.0 if n_open == 0 else 0.0)  # fully enclosed: can't see anyone coming
+                if BASE and loot_pts:
+                    # home base: a strong corner with loot around it (short trips, then back)
+                    bx, by = nav.center(c)
+                    near = sum(v for (lx, ly, v) in loot_pts if (lx - bx) ** 2 + (ly - by) ** 2 < BASE_LOOT_R ** 2)
+                    s -= BASE_LOOT_W * min(near, 15.0)
                 if s < bs:
                     best, bs, bface = c, s, face
         self.cover_face = bface

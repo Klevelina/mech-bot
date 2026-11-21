@@ -47,7 +47,8 @@ SLICE_S = 0.020        # A* time per decision
 
 # sound kind -> how much it says "an enemy mech is there" (x band multiplier). npc_gun/crate/drop/death: ignored
 SOUND_PRIO = {"step": 3.0, "boost": 3.0, "jet": 3.0, "reload": 3.0, "laser_charge": 3.0,
-              "lightning": 2.5, "gun": 2.0, "laser": 2.0, "mortar": 1.5, "explosion": 1.0}
+              "lightning": 2.5, "gun": 2.0, "laser": 2.0, "mortar": 1.5}
+# (not "explosion": that's where a shell LANDED, not where the shooter is; the "mortar" launch sound is)
 BAND_MULT = {"near": 1.0, "mid": 0.6, "far": 0.25}
 BAND_DIST = {"near": 35.0, "mid": 110.0, "far": 230.0}  # rough distance for each band
 MOVE_SOUNDS = ("step", "boost", "jet", "reload", "laser_charge")
@@ -103,3 +104,13 @@ LASER_LEAD_S = 0.1     # laser fires on our next decision: aim where the target 
 LIGHTNING_CLUSTER = True  # with lightning: prefer targets with other enemies within chain range
 OPEN_WATCH = True      # parked in the open (8+ of 12 directions) with enemies around: sweep the torso wider
 UPGRADE_BY_LOADOUT = True  # upgrade order depends on what we carry (loot.UPGRADES_FOR)
+
+# ---- home base ambush: fight where we're strong
+BASE = True            # the cover spot doubles as a home base: chosen with a bonus for loot around it
+BASE_LOOT_R = 70.0     # loot trips and exploring stay within this of the base (supply drops excepted)
+BASE_LOOT_W = 8.0      # m of extra walking accepted per point of known loot value near a base
+BASE_REPICK_S = 30.0   # early and quiet: re-pick the base this often (more loot seen)
+BASE_AT_R = 8.0        # "at the base"
+BASE_AMBUSH = True     # at the base: don't back away, don't hunt for AMBUSH_WAIT s, hold the gun until close
+AMBUSH_WAIT = 12.0
+AMBUSH_FIRE_R = 60.0   # gun holds fire beyond this unless the target is shooting us (laser/lightning/mortar don't)

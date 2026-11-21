@@ -71,6 +71,9 @@ class SensesMixin:
                 dn = math.hypot(cx - nc[0], cy - nc[1])
                 if dn > nr - 20 or math.hypot(cx - cc[0], cy - cc[1]) > cr - 20:
                     continue
+                base = self.cover if BASE else None
+                if base is not None and math.hypot(cx - base[0], cy - base[1]) > BASE_LOOT_R:
+                    continue  # explore around the base only
                 if self.danger(cx, cy, self._t):
                     continue
                 s = d + 0.5 * dn
