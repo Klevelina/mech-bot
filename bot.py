@@ -135,6 +135,7 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         for m in mechs:
             self.enemies[m["id"]] = (t, m["pos"][0], m["pos"][1])
             self.epos[m["id"]] = (t, m["pos"], m["vel"])
+        prev_threat_t = self.threat_t
         if mechs:
             self.threat_t = t
         for e in obs["events"]:
@@ -168,6 +169,14 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         self.style = self.loadout_style(weapons)
         self.read_situation(obs, t)
         self.all_in = SQUAD_ALL_IN and self.situation == "squad"
+        self.gearing = GEAR_FIRST and self.all_in and t < GEAR_UNTIL
+        if self.gearing and mechs:
+            # gear first: mechs that haven't hurt us, carry no laser close by and aren't on top of us are left alone
+            calm = [m for m in mechs if self.gear_harmless(me, m)]
+            if calm:
+                mechs = [m for m in mechs if m not in calm]
+                if not mechs and self.threat_t == t and t - self.last_dmg_t > 0.05:
+                    self.threat_t = prev_threat_t  # only harmless ones in sight: keep looting
         if KILL_PILE:
             for e in obs["events"]:
                 if e["type"] == "kill" and e.get("target") in self.epos:
@@ -261,7 +270,9 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
                     skip = ("npc",) if me["hp"] < ALLIN_DRONE_HP * me["max_hp"] else ()
                 tid, _ = self.mem.best_target(me, zone, weapons, late, md, lambda ix, iy: self.danger(ix, iy, t), skip,
                                               phase=self.phase,
-                                              laser_seek=LASER_SEEK_R if (LASER_SEEK and self.all_in) else 0.0,
+                                              laser_seek=(GEAR_LASER_SEEK_R if self.gearing else LASER_SEEK_R)
+                                              if (LASER_SEEK and self.all_in) else 0.0,
+                                              weapon_r=GEAR_WEAPON_R if self.gearing else 0.0,
                                               drone_v=ALLIN_DRONE_V if self.all_in else 0.0)
                 if tid != self.target:
                     self.target, self.target_since = tid, t

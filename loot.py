@@ -168,7 +168,7 @@ class Memory:
         return it["cell"] if it["ok"] else -1
 
     def best_target(self, me, zone, weapons, late, max_dist, danger, skip=(), phase=None, laser_seek=0.0,
-                    drone_v=0.0):
+                    drone_v=0.0, weapon_r=0.0):
         """(id, item) worth going for, or (None, None). `danger(x, y)` -> True to skip.
         POWER: no laser/lightning yet -> those are the top target (up to POWER_R away); early phase -> drones next."""
         x, y = me["pos"][0], me["pos"][1]
@@ -211,6 +211,8 @@ class Memory:
                     v, reach = drone_v, max(max_dist, POWER_R)  # all in: drones are cubes, any phase
                 elif k == "npc" and (phase == "early" or (POWER_MORE and phase == "mid")):
                     v, reach = POWER_DRONE_V, max(max_dist, POWER_R)  # then drones: 2 cubes each, weak shooters
+            if weapon_r and k == "pickup":
+                reach = max(reach, weapon_r)  # gear first: any weapon we'd take is worth a long walk
             if laser_seek and k == "pickup" and it["wkind"] == "laser":
                 # a laser we'd take (empty slot, or in place of lightning / mortar): worth a long walk
                 v, reach = max(v, POWER_WEAPON_V), max(reach, laser_seek)
