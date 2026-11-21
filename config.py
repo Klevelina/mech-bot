@@ -175,26 +175,3 @@ LOOT_GIVEUP_S = 15.0   # give up on an item after this long (was 40 s)
 LOOT_CRATE_SHOOT_R = 90.0  # start shooting a visible crate this far away, while still walking (was 60 m)
 LOOT_BOOST = True      # boost-run on loot trips and exploring longer than 15 m ...
 LOOT_BOOST_E = 55.0    # ... while energy is above this (keeps the rest for fights and escapes)
-
-# ---- ambush on the hunter's path (squad; free-for-all with the AMB_FFA_ limits): a known enemy out of our line of fire is coming (shared vision):
-# plan its route to us, wait at the nearby spot where it comes into view at our weapon's range, aimed there
-AMBUSH = True
-AMB_MEM_S = 8.0        # enemies seen this recently count (memory tracks the real position for 5 s)
-AMB_MAX_R = 160.0      # ... and this close
-AMB_R = 30.0           # waiting spots up to this far from us
-AMB_RANGE = {"lightning": 28.0, "gun": 40.0, "laser": 70.0}  # where we want it to appear (m from the spot)
-AMB_MIN_EMERGE = 12.0  # never a spot where it would pop up closer than this ...
-AMB_MAX_EMERGE = 60.0  # ... or further than this (or 2x the range we want)
-AMB_WALK_W = 0.5       # m of emergence-range error we accept per m walked to the spot
-AMB_HOLD_S = 12.0      # it hasn't shown up in this long: give up on it ...
-AMB_BAN_S = 10.0       # ... for this long
-AMB_REPLAN_S = 3.0     # re-plan the route this often, or when it moved this many m
-AMB_REPLAN_M = 20.0
-AMB_SLICE_S = 0.010    # planning time per decision
-AMB_RELOAD_FRAC = 0.85  # waiting: reload below this fraction of a magazine if it's not about to appear ...
-AMB_RELOAD_CLEAR_R = 80.0  # ... and no other enemy is known within this many m
-# free-for-all (the final): nobody shares vision, so wait only for an enemy seen walking toward us
-AMBUSH_FFA = True
-AMB_FFA_MAX_R = 100.0   # ... this close
-AMB_FFA_APPROACH = 2.0  # ... at least this fast (m/s toward us) when last seen
-AMB_FFA_HOLD_S = 6.0    # ... and give up sooner if it doesn't show
