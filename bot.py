@@ -10,6 +10,7 @@ import mechfight as mf
 from nav import Nav, Search
 from loot import Memory, pick_upgrade, weapon_take
 from aim import AimLearner
+from tactics import EnemyModel, Jinker, mortar_landing
 
 # ---- switches (flip to compare submissions)
 LOOT = True            # go for items at all
@@ -36,6 +37,11 @@ HIDE_LOW_HP = 0.30     # below this HP fraction, under fire: hide from every att
 EXPLORE = True         # early, with nothing to loot: walk to unexplored areas to find loot
 EXPLORE_UNTIL = 100.0  # match time
 EXPLORE_BIN = 25.0     # m, size of the "have we looked here" bins
+FIELD = True           # in fights, stand where (expected damage taken) - (expected damage dealt) is lowest
+FIELD_H = 3.0          # ... over this many seconds
+FIELD_KILL_W = 1.0     # ... weight of "fraction of an enemy we kill" vs "fraction of our HP we lose"
+JINK = True            # step side to side (learned pattern) while a gun is shooting at us
+DODGE = True           # sidestep lasers aimed at us while charging; leave mortar landing spots
 SLICE_S = 0.020        # A* time per decision
 
 
@@ -97,6 +103,12 @@ class Bot:
         npc = cfg.get("npc", {})
         self.npc_dps = npc.get("damage", 25) / max(0.1, npc.get("cooldown", 1.0))
         self.wcfg = cfg.get("weapons", {})
+        self.emodel = EnemyModel(cfg)
+        self.jinker = Jinker(hello.get("seed", 0))
+        self.jink_hist = deque()
+        self.gravity = cfg["mech"].get("gravity", 22)
+        self.gun_dmg_tick = 0.0
+        self.last_gun_dmg_t = -1e9
 
     # ---------- goal selection
     def choose_cover(self, mx, my, zone):
@@ -149,9 +161,16 @@ class Bot:
         px, py, pz = pos
         vx, vy, vz = vel if vel else (0.0, 0.0, 0.0)
         vx, vy = vx * k, vy * k
+        # falling (not jetting) target: gravity pulls it down during the flight; vertical lead isn't scaled by k
+        g, gz = 0.0, -1e9
+        if vz < 0 and self.nav is not None:
+            gz = self.nav.ground_z(px, py)
+            if pz > gz + 1.5:
+                g = self.gravity
         tt = 0.0
         for _ in range(3):
-            ax, ay, az = px + vx * tt, py + vy * tt, pz + zoff + vz * tt
+            ax, ay = px + vx * tt, py + vy * tt
+            az = max(pz + vz * tt - 0.5 * g * tt * tt, gz) + zoff
             d = math.sqrt((ax - mx) ** 2 + (ay - my) ** 2 + (az - mz) ** 2)
             tt = d / speed if speed else 0.0
         h = math.hypot(ax - mx, ay - my)
@@ -212,17 +231,7 @@ class Bot:
         if m["kind"] == "npc":
             est = self.npc_dps * 0.7 if d < 90 else 0.0
         else:
-            est = 0.0
-            for k in (m.get("weapons") or ["gun"]):
-                w = self.wcfg.get(k, {})
-                if k == "gun" and d < w.get("range", 230):
-                    est = max(est, 0.5 * w.get("damage", 45) / max(0.05, w.get("cooldown", 0.24)))
-                elif k == "lightning" and d < w.get("range", 45) + 5:
-                    est = max(est, w.get("damage", 60) / max(0.05, w.get("cooldown", 0.25)))
-                elif k == "laser" and d < w.get("range", 280):
-                    est = max(est, w.get("damage", 315) / (w.get("charge", 0.75) + w.get("cooldown", 1.65)))
-                elif k == "mortar" and d < 235:
-                    est = max(est, 0.4 * w.get("damage", 200) / max(0.1, w.get("cooldown", 2.0)))
+            est = self.emodel.dps_at(m["id"], d, t)  # known / inferred / expected weapons by range
             attacking = t - self.attackers.get(m["id"], -1e9) < 4.0
             est *= 1.0 if attacking else 0.5
         return max(est, seen)
@@ -386,6 +395,170 @@ class Bot:
         f = (sr - 2.0) / d
         return sx + (px - sx) * f, sy + (py - sy) * f
 
+    # ---------- evasive movement
+    def walkable_dir(self, x, y, dx, dy, dist=4.0):
+        nav = self.nav
+        c0 = nav.cell_of(x, y)
+        c = nav.cell_of(x + dx * dist, y + dy * dist)
+        return (nav.comp[c] == nav.main or nav.comp[c] == nav.comp[c0]) and not nav.blocked[c] and nav.in_safe(c) \
+            and nav.surf[c] - nav.surf[c0] <= 1.3
+
+    def evade(self, obs, me, move, t):
+        """Mortar dodge > laser sidestep > jink against guns. Returns (new move or None, boost?)."""
+        if self.nav is None:
+            self.jinker.step(t, False, 0.0)
+            return None, False
+        x, y, z = me["pos"]
+        mechs = [m for m in obs["mechs"] if m["kind"] == "mech"]
+        if DODGE:
+            mw = self.wcfg.get("mortar", {})
+            for pr in obs["projectiles"]:
+                if pr["kind"] != "mortar":
+                    continue
+                land = mortar_landing(pr["pos"], pr["vel"], mw.get("gravity", 22), self.nav.ground_z)
+                if land and math.hypot(land[0] - x, land[1] - y) < mw.get("splash_radius", 7) + 3.0:
+                    dx, dy = x - land[0], y - land[1]
+                    dn = math.hypot(dx, dy)
+                    if dn < 0.5:  # dead on us: any walkable side
+                        dx, dy, dn = -math.sin(me["aim"][0]), math.cos(me["aim"][0]), 1.0
+                    dx, dy = dx / dn, dy / dn
+                    if not self.walkable_dir(x, y, dx, dy):
+                        dx, dy = -dy, dx
+                    self.jinker.step(t, False, 0.0)
+                    return [dx, dy], me["energy"] > 35  # walking usually clears 7 m; boost only with energy to spare
+        # who is shooting at us: a laser charging on us, else the nearest gun holder that hit us / sees us
+        laser = None
+        if DODGE:
+            for m in mechs:
+                if m.get("charging"):
+                    b = math.atan2(y - m["pos"][1], x - m["pos"][0])
+                    if abs(wrap(m["aim"][0] - b)) < 0.1 and self.nav.los(m["pos"][0], m["pos"][1], m["pos"][2] + 7,
+                                                                       x, y, z + 4.5):
+                        laser = m
+                        break
+        under_gun = t - self.last_gun_dmg_t < 3.0
+        active = JINK and (under_gun or laser is not None)
+        side = self.jinker.step(t, active, self.gun_dmg_tick)
+        if not active:
+            return None, False
+        if laser is not None:
+            src = laser["pos"]
+            if side == 0:
+                side = self.jinker.side
+        else:
+            shooters = [m for m in mechs if "gun" in self.emodel.kinds.get(m["id"], {"gun"}) and
+                        t - self.attackers.get(m["id"], -1e9) < 3.0]
+            if shooters:
+                src = min(shooters, key=lambda m: math.hypot(m["pos"][0] - x, m["pos"][1] - y))["pos"]
+            else:
+                b = self.dmg_bearing[1]
+                src = [x + 100 * math.cos(b), y + 100 * math.sin(b), z]
+            if side == 0:
+                if self.escape is not None:
+                    side = self.jinker.side  # never pause while running for cover
+                else:
+                    return [0.0, 0.0], False  # stop-and-go pause
+        # wedged while jinking (thin obstacle the 2 m grid misses): reverse
+        self.jink_hist.append((t, x, y))
+        while self.jink_hist and t - self.jink_hist[0][0] > 1.0:
+            self.jink_hist.popleft()
+        t0, x0, y0 = self.jink_hist[0]
+        if t - t0 > 0.8 and math.hypot(x - x0, y - y0) < 0.5:
+            self.jinker.flip()
+            side = -side
+            self.jink_hist.clear()
+        b = math.atan2(src[1] - y, src[0] - x)
+        px, py = -math.sin(b) * side, math.cos(b) * side
+        if not self.walkable_dir(x, y, px, py):
+            self.jinker.flip()
+            px, py = -px, -py
+            if not self.walkable_dir(x, y, px, py):
+                return None, False
+        bx, by = move
+        if bx == 0.0 and by == 0.0 and self.goal is not None:
+            gx, gy = self.goal
+            dg = math.hypot(gx - x, gy - y)
+            if dg > 6.0:  # drifted while jinking: lean back toward where we want to stand
+                bx, by = 0.5 * (gx - x) / dg, 0.5 * (gy - y) / dg
+        if self.escape is not None and (bx or by):
+            mx, my = bx + 0.4 * px, by + 0.4 * py  # escaping: reaching cover first, small wobble only
+        else:
+            mx, my = 0.6 * bx + px, 0.6 * by + py
+        n = math.hypot(mx, my) or 1.0
+        return [mx / n, my / n], laser is not None and me["energy"] > 20
+
+    def choose_field(self, me, t, t_start, obs_mechs=()):
+        """Threat map: score spots around us (stay, or 12 / 25 m in 12 directions) by
+        expected damage we take there over FIELD_H s (+ while walking there) as a fraction of our HP,
+        minus FIELD_KILL_W x the fraction of an enemy we'd kill there. Lowest wins. None if no foes known."""
+        nav = self.nav
+        x, y, z = me["pos"]
+        foes = []
+        for i, (et, pos, vel) in self.emodel.pos.items():
+            age = t - et
+            if age > 5.0 or math.hypot(pos[0] - x, pos[1] - y) > 300:
+                continue
+            foes.append((i, pos, 1.0 if age < 0.15 else 0.6))  # remembered (not seen now): less sure
+        for m in obs_mechs:  # drones that are shooting at us
+            if m["kind"] == "npc" and t - self.npc_attackers.get(m["id"], -1e9) < 4.0:
+                foes.append((m["id"], m["pos"], 1.0))
+        if not foes:
+            return None
+        foes.sort(key=lambda f: math.hypot(f[1][0] - x, f[1][1] - y))
+        foes = foes[:4]
+        my_hp = max(1.0, me["hp"])
+        walk = me["stats"].get("walk_speed", 11.7)
+        npc_hp = {m["id"]: m.get("hp", 350.0) for m in obs_mechs if m["kind"] == "npc"}
+
+        def foe_dps(i, d):
+            if i >= 100:
+                return self.npc_dps * 0.7 if d < 90 else 0.0
+            return self.emodel.dps_at(i, d, t)
+
+        def eye_z(i, pos):
+            return pos[2] + (3.0 if i >= 100 else 8.0)
+
+        def incoming(px, py, top):
+            s = 0.0
+            for i, pos, w in foes:
+                dps = foe_dps(i, math.hypot(pos[0] - px, pos[1] - py))
+                if dps > 0 and nav.los(pos[0], pos[1], eye_z(i, pos), px, py, top, skip=1.0, step=2.0):
+                    s += w * dps
+            return s
+
+        inc_now = incoming(x, y, z + 8.5)
+        cands = [(x, y, z, True)]
+        for k in range(12):  # rings interleaved so a time cut-off doesn't drop whole directions
+            for r in (12.0, 25.0):
+                a = k * math.pi / 6 + (0.26 if r > 20 else 0.0)
+                c = nav.cell_of(x + r * math.cos(a), y + r * math.sin(a))
+                if nav.comp[c] == nav.main and nav.in_safe(c):
+                    cx, cy = nav.center(c)
+                    cands.append((cx, cy, nav.surf[c], False))
+        best, bs = None, 1e18
+        for n, (px, py, pz, cur) in enumerate(cands):
+            if n and time.perf_counter() > t_start + 0.012:
+                break
+            inc = inc_now if cur else incoming(px, py, pz + 8.5)
+            off = 0.0
+            for i, pos, w in foes:
+                npc = i >= 100
+                if not nav.los(px, py, pz + 7.0, pos[0], pos[1], pos[2] + (1.75 if npc else 4.5), step=2.0):
+                    continue
+                d = math.hypot(pos[0] - px, pos[1] - py)
+                pseudo = {"id": i, "kind": "npc" if npc else "mech", "pos": pos, "cubes": 0,
+                          "aim": [math.atan2(py - pos[1], px - pos[0]), 0.0]}  # assume it faces us
+                hp = npc_hp.get(i, 350.0) if npc else self.emodel.hp.get(i, 1400.0)
+                rate = self.our_dps(me, pseudo, d, True) / max(1.0, hp)
+                off = max(off, w * rate)
+            travel = math.hypot(px - x, py - y) / walk
+            score = (inc * FIELD_H + travel * inc_now * 0.6) / my_hp - FIELD_KILL_W * off * FIELD_H
+            if cur:
+                score -= 0.05  # don't move for nothing
+            if score < bs:
+                best, bs = (px, py), score
+        return best
+
     def update_fight_goal(self, me, m, t, t_start):
         """Where to stand against target m, by our loadout. None = keep the normal goal (cover)."""
         if not PLAYSTYLE or self.nav is None or m is None:
@@ -402,6 +575,12 @@ class Bot:
         hp_frac = me["hp"] / max(1.0, me["max_hp"])
         goal = None
 
+        if FIELD:
+            g = self.choose_field(me, t, t_start, self._obs_mechs)
+            if g is not None:
+                self.fight_goal, self.fight_mode = g, "FIELD"
+                return
+
         if WEIGH_THREATS and self.active:
             def eye(o):
                 return (o["pos"][0], o["pos"][1], o["pos"][2] + (3.0 if o["kind"] == "npc" else 8.0))
@@ -415,7 +594,9 @@ class Bot:
                 if c >= 0:
                     self.fight_goal, self.fight_mode = self.nav.center(c), "HIDE"
                     return
-            others = [(o, dps) for o, dps in self.active if o["id"] != m["id"] and dps > 0]
+            # only foes actually shooting us count as "others" to hide from
+            others = [(o, dps) for o, dps in self.active if o["id"] != m["id"] and dps > 0 and
+                      (t - self.attackers.get(o["id"], -1e9) < 4.0 or t - self.npc_attackers.get(o["id"], -1e9) < 4.0)]
             if others:
                 zc = m["pos"][2] + (1.75 if m["kind"] == "npc" else 4.5)
                 c = self.nav.flank_cell([eye(o) for o, _ in others], (ex, ey, zc), x, y, 40.0, t_start + 0.010)
@@ -515,6 +696,9 @@ class Bot:
 
         # ---- world model
         self.mem.update(obs)
+        self.emodel.update(obs)
+        self._obs_mechs = obs["mechs"]
+        self.gun_dmg_tick = 0.0
         mechs = [m for m in obs["mechs"] if m["kind"] == "mech"]
         for m in mechs:
             self.enemies[m["id"]] = (t, m["pos"][0], m["pos"][1])
@@ -532,6 +716,9 @@ class Bot:
                 self.hits[e["target"]] = t
             if e["type"] == "damaged" and e.get("by") is not None and e["by"] >= 100:
                 self.npc_attackers[e["by"]] = t
+            if e["type"] == "damaged" and e.get("weapon") == "gun":
+                self.gun_dmg_tick += e.get("amount", 0)
+                self.last_gun_dmg_t = t
             if e["type"] == "damaged" and e.get("by") is not None:
                 self.last_dmg_t = t
                 self.dmg_log.setdefault(e["by"], deque(maxlen=40)).append((t, e.get("amount", 0)))
@@ -689,16 +876,19 @@ class Bot:
             if d > 0.3:
                 move = [dx / d, dy / d]
         moving = move != [0.0, 0.0]
+        jinking, extra_boost = self.evade(obs, me, move, t)
+        if jinking:
+            move = jinking
 
         # ---- stuck detection
         self.hist.append((t, x, y))
         jump = False
-        boost = not me["in_zone"] or (self.escape is not None and me["energy"] > 30)
+        boost = not me["in_zone"] or (self.escape is not None and me["energy"] > 30) or extra_boost
         if self.unstick > 0:
             self.unstick -= 1
             boost = True
             jump = me["grounded"]
-        elif moving and len(self.hist) == self.hist.maxlen:
+        elif moving and not jinking and len(self.hist) == self.hist.maxlen:
             t0, x0, y0 = self.hist[0]
             moved = math.hypot(x - x0, y - y0)
             if t - t0 >= 0.9 and moved < 1.5:
