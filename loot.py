@@ -1,7 +1,7 @@
 """Loot: remember items we have seen, pick what to go for, weapon swap rules, upgrade picks."""
 import math
 
-from config import LIGHTNING_FIRST, PLAYBOOK, DROP_GUN_FOR_PAIR, MORTAR_USE, UPGRADE_BY_LOADOUT, LOOT_STICKY
+from config import LIGHTNING_FIRST, PLAYBOOK, DROP_GUN_FOR_PAIR, MORTAR_USE, UPGRADE_BY_LOADOUT
 
 # What a found item is worth before distance (rough "cubes" scale).
 VALUE = {"cube": 3.0, "crate": 2.5, "npc": 5.0, "pile": 6.0}  # a drone drops 2 cubes
@@ -154,9 +154,8 @@ class Memory:
             it["ok"], it["cell"] = ok, cell
         return it["cell"] if it["ok"] else -1
 
-    def best_target(self, me, zone, weapons, late, max_dist, danger, skip=(), current=None):
-        """(id, item) worth going for, or (None, None). `danger(x, y)` -> True to skip.
-        `current` (the item we're walking to) gets a LOOT_STICKY bonus so a slightly better one doesn't turn us."""
+    def best_target(self, me, zone, weapons, late, max_dist, danger, skip=()):
+        """(id, item) worth going for, or (None, None). `danger(x, y)` -> True to skip."""
         x, y = me["pos"][0], me["pos"][1]
         nc, nr = zone["next_center"], zone["next_radius"]
         cc, cr = zone["center"], zone["radius"]
@@ -195,8 +194,6 @@ class Memory:
             if self.reachable_cell(it) < 0:
                 continue
             s = v / (dist + 30.0)
-            if i == current and LOOT_STICKY:
-                s *= LOOT_STICKY
             if s > bs:
                 best, bs = i, s
         return (best, self.items[best]) if best is not None else (None, None)

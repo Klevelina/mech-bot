@@ -16,6 +16,13 @@ class FightMixin:
         `k` scales the horizontal lead (learned). Returns ([yaw, pitch], horizontal distance)."""
         mx, my, mz = me["pos"]
         mz += me["stats"].get("muzzle_height", 7)
+        if AIM_SELF_S:
+            # the shot leaves on the next ticks, from where we'll be then (matters when hopping or strafing)
+            sv = me.get("vel") or (0.0, 0.0, 0.0)
+            vz = sv[2]
+            if getattr(self, "jump_now", False) and me.get("grounded"):
+                vz = self.cfg["mech"].get("jump_speed", 11.0)  # jumping this decision: we'll be rising, not standing
+            mx, my, mz = mx + sv[0] * AIM_SELF_S, my + sv[1] * AIM_SELF_S, mz + vz * AIM_SELF_S
         px, py, pz = pos
         vx, vy, vz = vel if vel else (0.0, 0.0, 0.0)
         vx, vy = vx * k, vy * k
@@ -36,12 +43,21 @@ class FightMixin:
         pitch = max(st.get("min_pitch", -0.7), min(st.get("max_pitch", 1.3), math.atan2(az - mz, h)))
         return [math.atan2(ay - my, ax - mx), pitch], h
 
-    def fire(self, me, dist, aim, size, is_mech, late=False, gun_ok=True):
-        """fire flags for both slots at a target `dist` away along commanded `aim`; size = target radius."""
+    def fire(self, me, dist, aim, size, is_mech, late=False, gun_ok=True, vert=None):
+        """fire flags for both slots at a target `dist` away along commanded `aim`; size = target radius.
+        `vert`: up/down tolerance as a multiple of `size` (default 1.8 for a mech's full height, 1.0 otherwise)."""
         reserve = ENERGY_RESERVE_LATE if late else ENERGY_RESERVE
         cur = me["aim"]
-        err = abs(wrap(cur[0] - aim[0])) + abs(cur[1] - aim[1])
         tol = max(0.015, math.atan2(size, max(dist, 1.0)))
+        if AIM_SPLIT_TOL:
+            # sideways and up/down checked apart: a mech is 9 m tall but 5 m wide, so pitch can be off ~1.8x more
+            if vert is None:
+                vert = 1.8 if is_mech else 1.0
+            ptol = max(0.015, math.atan2(size * vert, max(dist, 1.0)))
+            yerr, perr = abs(wrap(cur[0] - aim[0])), abs(cur[1] - aim[1])
+            err = max(yerr, perr * tol / ptol)  # same units as before: on target when err < tol
+        else:
+            err = abs(wrap(cur[0] - aim[0])) + abs(cur[1] - aim[1])
         out = [False, False]
         for i, w in enumerate(me["weapons"]):
             if not w:
@@ -410,19 +426,13 @@ class FightMixin:
         if not PLAYSTYLE or self.nav is None or m is None:
             self.fight_goal = None
             return
+        if t - self.fight_goal_t < 1.0 and m["id"] == self.fight_goal_id:
+            return  # same target: refresh once a second; new target: right away
+        self.fight_goal_t = t
+        self.fight_goal_id = m["id"]
         x, y = me["pos"][0], me["pos"][1]
         ex, ey = m["pos"][0], m["pos"][1]
         d = math.hypot(ex - x, ey - y)
-        # same target: refresh once a second, or fast while it closes on us / is inside our band; new target: now
-        every = 1.0
-        if FIGHT_FAST_S and m["kind"] == "mech":
-            closing = (m["vel"][0] * (x - ex) + m["vel"][1] * (y - ey)) / max(d, 1.0) > FIGHT_CLOSING_V
-            if closing or d < band(our_role(me["weapons"]), m.get("weapons"))[0]:
-                every = FIGHT_FAST_S
-        if t - self.fight_goal_t < every and m["id"] == self.fight_goal_id:
-            return
-        self.fight_goal_t = t
-        self.fight_goal_id = m["id"]
         theirs = set(m.get("weapons") or [])
         hp_frac = me["hp"] / max(1.0, me["max_hp"])
         goal = None

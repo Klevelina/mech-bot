@@ -64,7 +64,7 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         self.fight_goal = None  # (x, y) where the playstyle wants us during a fight
         self.fight_goal_t = -1e9
         self.fight_goal_id = None
-        self.hold_at = None     # (x, y) where we stand our ground in a fight (FIGHT_HOLD)
+        self.fly_jet_until = -1e9  # jet until this time during the current hop (FLY)
         self.fight_mode = "FIGHTMOVE"
         self.last_dmg_t = -1e9
         self.style = "gun"
@@ -219,8 +219,7 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
                 skip = ()
                 if self.recovering:
                     md, skip = min(md, RECOVER_LOOT_DIST), ("crate", "npc")
-                tid, _ = self.mem.best_target(me, zone, weapons, late, md, lambda ix, iy: self.danger(ix, iy, t), skip,
-                                                 current=self.target)
+                tid, _ = self.mem.best_target(me, zone, weapons, late, md, lambda ix, iy: self.danger(ix, iy, t), skip)
                 if tid != self.target:
                     self.target, self.target_since = tid, t
             if self.target is not None:
@@ -251,8 +250,6 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         elif not mechs:
             self.fight_goal = None
             self.fight_goal_id = None
-        if fight_m is None or fight_m["kind"] != "mech" or self.escape is not None:
-            self.hold_at = None
         safe = t - self.threat_t > SAFE_AFTER
         if self.escape is not None:
             self.set_goal(self.escape["goal"], x, y)
@@ -276,16 +273,6 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             dgoal = math.hypot(self.fight_goal[0] - x, self.fight_goal[1] - y)
             stop_r = 3.0
             mode = self.fight_mode
-            self.hold_at = None
-        elif FIGHT_HOLD and fight_m is not None and fight_m["kind"] == "mech" and self.cover is not None and \
-                math.hypot(self.cover[0] - x, self.cover[1] - y) > FIGHT_HOLD_COVER_R:
-            # in a fight, inside our band: stand here and shoot instead of drifting back to the cover spot
-            if self.hold_at is None:
-                self.hold_at = (x, y)
-            self.set_goal(self.hold_at, x, y)
-            dgoal = math.hypot(self.hold_at[0] - x, self.hold_at[1] - y)
-            stop_r = 2.0
-            mode = "HOLD"
         elif DROPS and self.nav is not None and t - self.threat_t > 3.0 and self._drop(obs, me, t):
             g, stop_r, mode = self._drop_now
             self.set_goal(g, x, y)
@@ -401,6 +388,13 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
                     boost = True
             elif moved > 6.0:
                 self.stuck_n = 0
+        flying = False
+        if FLY and mechs and self.unstick == 0 and mode not in ("ESCAPE", "FINISH", "CONTEST", "HOLDRING", "DROP"):
+            flying = self.fly(obs, me, t)
+            if flying == "jump":
+                jump = True
+            elif flying == "jet":
+                boost = True
 
         # ---- aim: look where we go, sweeping to spot loot; parked: face the zone center
         if moving:
@@ -437,6 +431,7 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
                 and self.sound_face[2] > 0.6:
             yaw = self.sound_face[1]
             pitch = 0.05
+        self.jump_now = jump
         act.update(move=move, boost=boost, jump=jump, aim=[yaw, pitch])
 
         # ---- take weapons in reach (swap rules in loot.weapon_take)
@@ -488,7 +483,9 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
                 if HOLD_DODGY and is_mech and speed and h > 60:
                     # long shot: only if it can't stray further than ~1.5 body radii during the flight
                     gun_ok = self.aim.surprise(m["id"], tt) < 2.5 * scale * 1.5
-                fire = self.fire(me, h, aim, size, is_mech, late, gun_ok)
+                # full body in view: the whole 9 m height counts; only the upper body (behind low cover): tight
+                vert = None if not is_mech else (1.8 if abs(zoff - 4.5 * scale) < 0.1 else 0.6)
+                fire = self.fire(me, h, aim, size, is_mech, late, gun_ok, vert)
                 if self.late_zone and is_mech and not self.late_fire_ok(me, m, h, t):
                     fire = [False, False]  # late: keep regenerating, don't start fights we can't end fast
                 act["fire"] = fire
@@ -549,8 +546,31 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         what = f"{mode} {self.style} k{self.aim.gk:.2f}"
         mf.draw.label(f"hp {me['hp']:.0f} {what} d{dgoal:.0f} cubes {me['cubes']:.0f}"
                       f"{' tgt %d' % self.cur if self.cur is not None else ''}"
-                      f"{' S' if self.unstick else ''}{' P' if self.search else ''}")
+                      f"{' S' if self.unstick else ''}{' P' if self.search else ''}{' F' if flying else ''}")
         return act
+
+    def fly(self, obs, me, t):
+        """Hop and jet at random heights while a mech is shooting at us. Returns "jump", "jet" or False."""
+        x, y, z = me["pos"]
+        shot_at = t - self.dmg_bearing[0] < FLY_UNDER_FIRE_S
+        if not shot_at:
+            for m in obs["mechs"]:
+                if m["kind"] == "mech" and m.get("charging") and \
+                        abs(wrap(m["aim"][0] - math.atan2(y - m["pos"][1], x - m["pos"][0]))) < 0.15:
+                    shot_at = True  # a laser charging on us
+                    break
+        if not shot_at:
+            return False
+        reserve = FLY_RESERVE + (25.0 if any(w and w["kind"] == "lightning" for w in me["weapons"]) else 0.0)
+        if me["grounded"]:
+            if me["energy"] > reserve + 10.0 and self.jinker.rng.random() < FLY_HOP_P:
+                self.fly_jet_until = t + self.jinker.rng.uniform(*FLY_JET_S)
+                return "jump"
+            return False
+        high = self.nav is not None and z - self.nav.ground_z(x, y) > FLY_MAX_H
+        if t < self.fly_jet_until and me["energy"] > reserve and not high:
+            return "jet"
+        return False
 
 
 if __name__ == "__main__":

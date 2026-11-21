@@ -104,9 +104,12 @@ LIGHTNING_CLUSTER = True  # with lightning: prefer targets with other enemies wi
 OPEN_WATCH = True      # parked in the open (8+ of 12 directions) with enemies around: sweep the torso wider
 UPGRADE_BY_LOADOUT = True  # upgrade order depends on what we carry (loot.UPGRADES_FOR)
 
-# ---- commitment: fewer changes of mind
-LOOT_STICKY = 1.3      # the loot item we're already walking to scores this much higher (0 / 1 = off)
-FIGHT_HOLD = False     # (2.63 with it on) in a fight with nothing better to do: hold our ground instead of walking back to cover
-FIGHT_HOLD_COVER_R = 20.0  # ... unless the cover spot is this close (a near corner is still better)
-FIGHT_FAST_S = 0.3     # refresh fight positioning this often (not 1 s) while the target closes on us or is too close
-FIGHT_CLOSING_V = 3.0  # m/s toward us that counts as "closing"
+# ---- flying in fights: hop and jet at random heights while a mech is shooting us, so its shots go over/under
+FLY = True
+FLY_UNDER_FIRE_S = 2.0  # hop while a mech hit us this recently (or a visible laser charges at us)
+FLY_JET_S = (0.15, 0.6)  # random jet time per hop (s): ~3-8 m high, ~2-9 energy
+FLY_HOP_P = 0.5        # chance per grounded decision to hop again (irregular rhythm)
+FLY_MAX_H = 10.0       # stop jetting this high above the terrain (don't climb onto roofs)
+FLY_RESERVE = 20.0     # never jet below this energy (+25 more when we hold lightning: it fires on energy)
+AIM_SELF_S = 0.1       # aim from where our muzzle will be when the shot leaves (our velocity x this); 0 = off
+AIM_SPLIT_TOL = True   # fire check: sideways and up/down aim error judged separately (mechs are taller than wide)
