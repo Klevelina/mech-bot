@@ -18,7 +18,8 @@ class SensesMixin:
     def hear(self, obs, x, y, t):
         for s in obs.get("sounds", []):
             kind, band = s.get("kind"), s.get("dist")
-            if DEATH_PILES and kind == "death" and band in ("near", "mid"):
+            strip = ALLIN_STRIP and getattr(self, "all_in", False)
+            if DEATH_PILES and not strip and kind == "death" and band in ("near", "mid"):
                 # a mech died there: its cubes (+2) and weapons lie on the ground -> a loot target
                 b0, th0, dd = s["bearing"], t - s.get("age", 0.0), BAND_DIST[band]
                 px, py = x + dd * math.cos(b0), y + dd * math.sin(b0)
@@ -40,7 +41,7 @@ class SensesMixin:
                 dd = BAND_DIST[band]
                 self.enemies[("snd", self.snd_i % 40)] = (th, x + dd * math.cos(b), y + dd * math.sin(b))
                 self.snd_i += 1
-            if kind in MOVE_SOUNDS and band == "near":
+            if kind in MOVE_SOUNDS and band == "near" and not strip:
                 self.threat_t = max(self.threat_t, th)  # a mech moving within ~40 m: stop looting, be ready
 
     # ---------- early exploration
