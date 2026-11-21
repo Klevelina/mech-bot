@@ -93,7 +93,9 @@ BAND_DIST = {"near": 35.0, "mid": 110.0, "far": 230.0}  # rough distance for eac
 MOVE_SOUNDS = ("step", "boost", "jet", "reload", "laser_charge")
 
 # ---- late game, lightning, finishing kills
-LIGHTNING_FIRST = True  # prefer lightning pickups/swaps all game (chains through groups); its upgrades early
+LIGHTNING_FIRST = False  # prefer lightning pickups/swaps all game (True until the laser-gun build)
+LASER_FIRST = True     # gun + laser, like the top 4 in a real teams' free-for-all replay: a lightning gets swapped for
+                       # a laser (never the other way), laser pickups worth more, and the gun is never dropped late
 LATE_RADIUS = 70.0     # "late game": next circle this small or smaller
 LATE_GAME = True       # late: no hunting / drop contests; hold fire unless it's a quick kill or they shoot us
 LATE_QUICK_KILL_S = 3.0  # ... "quick kill"
