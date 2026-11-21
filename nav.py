@@ -259,6 +259,15 @@ class Nav:
                 return best
         return c0
 
+    safe = None  # (cx, cy, r): hiding/flanking spots must be inside this circle (set by the bot from the zone)
+
+    def in_safe(self, c: int) -> bool:
+        if self.safe is None:
+            return True
+        x, y = self.center(c)
+        sx, sy, sr = self.safe
+        return (x - sx) ** 2 + (y - sy) ** 2 < sr * sr
+
     def los(self, ax, ay, az, bx, by, bz, skip=3.0) -> bool:
         """Line of sight/fire between two 3D points over the grid's surfaces (buildings + terrain).
         Ignores the first/last `skip` m (the shooter's and target's own cells). Trees are not solids."""
@@ -302,7 +311,7 @@ class Nav:
                     i, j = i0 + di, j0 + dj
                     if 0 <= i < W and 0 <= j < H:
                         c = j * W + i
-                        if comp[c] == main:
+                        if comp[c] == main and self.in_safe(c):
                             cand.append(c)
             for n_c, c in enumerate(cand[::2] if r > 6 else cand):
                 cx, cy = self.center(c)
@@ -312,6 +321,37 @@ class Nav:
                     return -1
             if deadline is not None and time.perf_counter() > deadline:
                 return -1
+        return -1
+
+    def flank_cell(self, hide_from, shoot_at, mx, my, max_r=40.0, deadline=None):
+        """Nearest walkable cell (searching outward from us) hidden from every eye in `hide_from`
+        [(x, y, eye_z), ...] and, if `shoot_at` (x, y, z) is given, with a clear line of fire to it.
+        Returns a cell or -1."""
+        i0 = int((mx - self.ox) / self.cell)
+        j0 = int((my - self.oy) / self.cell)
+        W, H, comp, main, surf = self.W, self.H, self.comp, self.main, self.surf
+        rmax = int(max_r / self.cell)
+        n_c = 0
+        for r in range(0, rmax + 1):
+            cand = []
+            for dj in range(-r, r + 1):
+                for di in ((-r, r) if abs(dj) != r else range(-r, r + 1)):
+                    i, j = i0 + di, j0 + dj
+                    if 0 <= i < W and 0 <= j < H:
+                        c = j * W + i
+                        if comp[c] == main and self.in_safe(c):
+                            cand.append(c)
+            for c in cand[::2] if r > 6 else cand:
+                n_c += 1
+                if deadline is not None and n_c & 7 == 0 and time.perf_counter() > deadline:
+                    return -1
+                cx, cy = self.center(c)
+                top = surf[c] + 8.5
+                if any(self.los(ex, ey, ez, cx, cy, top, skip=1.0) for ex, ey, ez in hide_from):
+                    continue
+                if shoot_at is not None and not self.los(cx, cy, surf[c] + 7.0, *shoot_at):
+                    continue
+                return c
         return -1
 
     def penalize(self, x: float, y: float, radius_cells: int = 2, amount: float = 25.0) -> None:
