@@ -268,13 +268,13 @@ class Nav:
         sx, sy, sr = self.safe
         return (x - sx) ** 2 + (y - sy) ** 2 < sr * sr
 
-    def los(self, ax, ay, az, bx, by, bz, skip=3.0) -> bool:
+    def los(self, ax, ay, az, bx, by, bz, skip=3.0, step=None) -> bool:
         """Line of sight/fire between two 3D points over the grid's surfaces (buildings + terrain).
         Ignores the first/last `skip` m (the shooter's and target's own cells). Trees are not solids."""
         dx, dy, dz = bx - ax, by - ay, bz - az
         d = math.hypot(dx, dy)
         sub = self.sub
-        n = int(d / sub)
+        n = int(d / (step or sub))
         if n < 2:
             return True
         ftop, fbase, SW, SH, ox, oy = self.ftop, self.fbase, self.SW, self.SH, self.ox, self.oy
