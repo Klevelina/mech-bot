@@ -182,7 +182,10 @@ class FightMixin:
     def pick_target(self, me, mechs, t):
         x, y = me["pos"][0], me["pos"][1]
         if WEIGH_THREATS:
-            return self.pick_target_weighted(me, mechs, t)
+            best = self.pick_target_weighted(me, mechs, t)  # also fills self.active (threats on us)
+            if FOCUS and getattr(self, "situation", "") == "squad":
+                return self.pick_target_focus(me, mechs, t) or best
+            return best
         if not SMART_TARGET:
             return min(mechs, key=lambda m: math.dist(m["pos"], me["pos"]))
         best, bs = None, -1e18
@@ -202,6 +205,33 @@ class FightMixin:
             if not self.can_hit(me, m):
                 s -= 60.0
             if s > bs:
+                best, bs = m, s
+        return best
+
+    def pick_target_focus(self, me, mechs, t):
+        """FOCUS (squad): the enemy mech we can hit that's closest to dying, sticking to our current target.
+        None if no enemy mech is in our line of fire."""
+        x, y = me["pos"][0], me["pos"][1]
+        best, bs = None, 1e18
+        for m in mechs:
+            if m["kind"] != "mech":
+                continue
+            ex, ey = m["pos"][0], m["pos"][1]
+            d = math.hypot(ex - x, ey - y)
+            if d > FOCUS_MAX_D or not self.can_hit(me, m):
+                continue
+            hp = m.get("hp") or 1400.0
+            s = d + FOCUS_HP_W * hp
+            if m.get("max_hp") and hp <= 0.3 * m["max_hp"]:
+                s -= FOCUS_LOW
+            if m["id"] == self.cur:
+                s -= FOCUS_STICK
+            if t - self.attackers.get(m["id"], -1e9) < 4.0:
+                s -= FOCUS_HITME
+            closing = (m["vel"][0] * (x - ex) + m["vel"][1] * (y - ey)) / max(d, 1.0)
+            if closing > 3.0:
+                s -= FOCUS_CLOSING
+            if s < bs:
                 best, bs = m, s
         return best
 

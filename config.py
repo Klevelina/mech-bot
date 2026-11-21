@@ -63,6 +63,15 @@ VANISH_WALK = 0.38     # move length while hidden: 0.38 x 11.7 m/s = 4.4 m/s, un
 VANISH_GIVEUP = 2      # tracked through it this many times in a row: stop vanishing
 UNAWARE_S = 12.0       # an enemy that lost us stays an ambush target this long ...
 UNAWARE_WIN_R = 1.0    # ... hunted at these odds (FIGHT_WIN_R otherwise; its back is x1.5 damage already)
+# squad: focus fire - among enemy mechs we can hit, take the one closest to dying: score = distance (m) + FOCUS_HP_W x
+# its HP, minus bonuses for being nearly dead, being our current target (stick to it), hitting us, closing in. Lowest wins
+FOCUS = True
+FOCUS_HP_W = 0.2       # m per HP point (1400 HP = 280 m: a damaged enemy further away beats a healthy one close by)
+FOCUS_LOW = 100.0      # ... minus this below 30% HP
+FOCUS_STICK = 120.0    # ... minus this for our current target
+FOCUS_HITME = 40.0     # ... minus this if it hit us in the last 4 s
+FOCUS_CLOSING = 15.0   # ... minus this if it's coming at us faster than 3 m/s
+FOCUS_MAX_D = 240.0    # only targets this close
 KILL_PILE = True       # (any match) our kill drops its cubes (+2) and weapons where it died: loot target right away
 
 DROP_WAIT_CALM = True  # FREE-FOR-ALL ONLY (vs the squad, 2+ enemies at a drop are hunters coming for us, not a fight):
