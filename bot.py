@@ -65,7 +65,6 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         self.fight_goal = None  # (x, y) where the playstyle wants us during a fight
         self.fight_goal_t = -1e9
         self.fight_goal_id = None
-        self.fly_jet_until = -1e9  # jet until this time during the current hop (FLY)
         self.fight_mode = "FIGHTMOVE"
         self.last_dmg_t = -1e9
         self.style = "gun"
@@ -159,6 +158,10 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             self.nav.safe = (sc[0], sc[1], max(sr - 4.0, 5.0))
         self.aim.observe(t, obs["mechs"])
         self.style = self.loadout_style(weapons)
+        self.big = POWER and me.get("cubes", 0) >= POWER_BIG_CUBES  # bigger mech, easier to hit: more careful
+        if self.big and not getattr(self, "_was_big", False):
+            self.zone_key = None  # just got big: re-pick a more enclosed cover spot now
+        self._was_big = self.big
         # a visible enemy with lightning within 50 m: its arc would cancel a laser charge (playbook)
         self.lit_near = any(o["kind"] == "mech" and "lightning" in (o.get("weapons") or []) and
                             math.hypot(o["pos"][0] - x, o["pos"][1] - y) < 50.0 for o in obs["mechs"])
@@ -168,7 +171,7 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
                 self.capturers[dr["holder"]] = t
         if SOUNDS:
             self.hear(obs, x, y, t)
-        fighting = t - self.threat_t < FIGHTING_S
+        fighting = t - self.threat_t < 3.0
         # recovery: after a fight, below RECOVER_HP -> no shooting things (it resets the 5 s regen timer),
         # no exploring/hunting; pick up only what needs no shooting, close by; hold cover until healed
         hp_frac = me["hp"] / max(1.0, me["max_hp"])
@@ -187,7 +190,7 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
                                 "mid": (AGGRO_MID_HEAL if EARLY_AGGRO else
                                         (PHASE_MID_HEAL, 0.9) if group_weapon else (None, None)),
                                 "late": (PHASE_LATE_HEAL, 1.0)}[self.phase]
-        if heal_lo is not None and not self.recovering and hp_frac < heal_lo and t - self.threat_t > HEAL_AFTER_S:
+        if heal_lo is not None and not self.recovering and hp_frac < heal_lo and t - self.threat_t > 3.0:
             self.recovering = True
         elif self.recovering and (heal_hi is None or hp_frac >= heal_hi):
             self.recovering = False
@@ -223,7 +226,8 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
                 skip = ()
                 if self.recovering:
                     md, skip = min(md, RECOVER_LOOT_DIST), ("crate", "npc")
-                tid, _ = self.mem.best_target(me, zone, weapons, late, md, lambda ix, iy: self.danger(ix, iy, t), skip)
+                tid, _ = self.mem.best_target(me, zone, weapons, late, md, lambda ix, iy: self.danger(ix, iy, t), skip,
+                                              phase=self.phase)
                 if tid != self.target:
                     self.target, self.target_since = tid, t
             if self.target is not None:
@@ -277,7 +281,7 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             dgoal = math.hypot(self.fight_goal[0] - x, self.fight_goal[1] - y)
             stop_r = 3.0
             mode = self.fight_mode
-        elif DROPS and self.nav is not None and t - self.threat_t > DROP_AFTER_S and self._drop(obs, me, t):
+        elif DROPS and self.nav is not None and t - self.threat_t > 3.0 and self._drop(obs, me, t):
             g, stop_r, mode = self._drop_now
             self.set_goal(g, x, y)
             dgoal = math.hypot(g[0] - x, g[1] - y)
@@ -397,13 +401,6 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
                     boost = True
             elif moved > 6.0:
                 self.stuck_n = 0
-        flying = False
-        if FLY and mechs and self.unstick == 0 and mode not in ("ESCAPE", "FINISH", "CONTEST", "HOLDRING", "DROP"):
-            flying = self.fly(obs, me, t)
-            if flying == "jump":
-                jump = True
-            elif flying == "jet":
-                boost = True
 
         # ---- aim: look where we go, sweeping to spot loot; parked: face the zone center
         if moving:
@@ -558,26 +555,8 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         what = f"{mode} {self.style} k{self.aim.gk:.2f}"
         mf.draw.label(f"hp {me['hp']:.0f} {what} d{dgoal:.0f} cubes {me['cubes']:.0f}"
                       f"{' tgt %d' % self.cur if self.cur is not None else ''}"
-                      f"{' S' if self.unstick else ''}{' P' if self.search else ''}{' F' if flying else ''}")
+                      f"{' S' if self.unstick else ''}{' P' if self.search else ''}")
         return act
-
-    def fly(self, obs, me, t):
-        """Two or more enemies close: hop and jet at random heights. Returns "jump", "jet" or False."""
-        x, y, z = me["pos"]
-        near = sum(1 for m in obs["mechs"] if m["kind"] == "mech" and
-                   math.hypot(m["pos"][0] - x, m["pos"][1] - y) < FLY_NEAR_R)
-        if near < FLY_MIN_ENEMIES:
-            return False
-        reserve = FLY_RESERVE + (25.0 if any(w and w["kind"] == "lightning" for w in me["weapons"]) else 0.0)
-        if me["grounded"]:
-            if me["energy"] > reserve + 10.0 and self.jinker.rng.random() < FLY_HOP_P:
-                self.fly_jet_until = t + self.jinker.rng.uniform(*FLY_JET_S)
-                return "jump"
-            return False
-        high = self.nav is not None and z - self.nav.ground_z(x, y) > FLY_MAX_H
-        if t < self.fly_jet_until and me["energy"] > reserve and not high:
-            return "jet"
-        return False
 
 
 if __name__ == "__main__":

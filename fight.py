@@ -243,7 +243,7 @@ class FightMixin:
         x, y, z = me["pos"]
         if self.escape is not None:
             src = self.escape["src"]
-            hold = LASER_HOLD_S if self.escape.get("laser") else ESCAPE_END_S
+            hold = LASER_HOLD_S if self.escape.get("laser") else 4.0
             came = None
             if self.escape.get("laser"):
                 came = next((m for m in mechs if m["id"] == src and self.can_hit(me, m) and
@@ -543,7 +543,8 @@ class FightMixin:
             # being shot and losing the race (we'd die well before it does): leave now, while we still have HP
             hittable = self.can_hit(me, m)
             quick = hittable and (m.get("hp") or 1400.0) / self.our_dps(me, m, d, True) < 2.0
-            if not quick and self.fight_odds(me, m, t) < FIGHT_LOSE_R:
+            lose_r = POWER_BIG_LOSE_R if getattr(self, "big", False) else FIGHT_LOSE_R
+            if not quick and self.fight_odds(me, m, t) < lose_r:
                 # only with a hiding spot close by: backing off across open ground just gets us shot longer
                 eyes = [(o["pos"][0], o["pos"][1], o["pos"][2] + 8.0) for o in self._obs_mechs if o["kind"] == "mech"]
                 c = self.nav.flank_cell(eyes, None, x, y, DISENGAGE_R, t_start + 0.010)
@@ -560,7 +561,8 @@ class FightMixin:
             # ... unless the target dies in ~2 s: finish it instead
             hittable = self.can_hit(me, m)
             ttk = (m.get("hp") or 1400.0) / self.our_dps(me, m, d, hittable)
-            if HIDE_LOW_HP and hp_frac < HIDE_LOW_HP and under_fire and not (hittable and ttk < 2.0):
+            hide_hp = POWER_BIG_HIDE_HP if getattr(self, "big", False) else HIDE_LOW_HP
+            if HIDE_LOW_HP and hp_frac < hide_hp and under_fire and not (hittable and ttk < 2.0):
                 c = self.nav.flank_cell([eye(o) for o, _ in self.active], None, x, y, 45.0, t_start + 0.010)
                 if c >= 0:
                     self.fight_goal, self.fight_mode = self.nav.center(c), "HIDE"

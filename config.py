@@ -5,11 +5,7 @@ LOOT = True            # go for items at all
 LOOT_UNTIL = 150.0     # match time after which we only loot items close by
 LOOT_LATE_DIST = 40.0  # ... "close by" after LOOT_UNTIL
 LOOT_MAX_DIST = 110.0  # (160 in the 2.94 build) early-phase loot range
-SAFE_AFTER = 3.0       # s without seeing an enemy mech / being hit by one before looting again (6 in the 2.90 build)
-FIGHTING_S = 3.0       # "in a fight" for this long after the last threat (no sweeping the torso, no weapon swaps)
-HEAL_AFTER_S = 3.0     # start healing (phases) after this long without a threat
-DROP_AFTER_S = 3.0     # go for a supply drop only after this long without a threat
-ESCAPE_END_S = 4.0     # an escape ends this long after the attacker's last hit
+SAFE_AFTER = 6.0       # s without seeing an enemy mech / being hit by one before looting again
 DANGER_R = 130.0       # skip items this close to where an enemy mech was seen recently
 DANGER_S = 25.0        # ... "recently"
 ENERGY_RESERVE = 25.0  # lightning won't spend below this (kept for boost/jet escapes)
@@ -132,17 +128,18 @@ LASER_HOLD_S = 4.0     # stay hidden until this long without a laser hit; on lea
                        # the gun; if it follows us within LASER_HIDE_MIN with a clear shot, stop hiding and shoot first
 LASER_RELOAD_FRAC = 0.75  # hidden from a laser: reload below this fraction of a magazine
 
+# ---- power: get stronger faster (cubes = +4% HP and damage each, up to 10), then be careful because we're bigger
+POWER = True
+POWER_WEAPON_V = 12.0  # no laser/lightning yet: those pickups are worth this (a cube is 3), any phase ...
+POWER_DRONE_V = 9.0    # ... early phase: a drone is worth this (2 cubes, weak shooter; was 5) ...
+POWER_R = 180.0        # ... and both are gone for up to this far (other loot: the phase's normal range)
+POWER_BIG_CUBES = 5    # from this many cubes (25% bigger, easier to hit):
+POWER_BIG_EXPO = 2.0   # ... cover spots: open directions count this much more (more enclosed corners)
+POWER_BIG_HIDE_HP = 0.45  # ... under fire, hide from everyone below this HP (normally HIDE_LOW_HP 0.30)
+POWER_BIG_LOSE_R = 1.0    # ... leave a fight (to cover within DISENGAGE_R) below these odds (normally 0.8)
+
 # ---- faster looting
 LOOT_GIVEUP_S = 15.0   # give up on an item after this long (was 40 s)
 LOOT_CRATE_SHOOT_R = 90.0  # start shooting a visible crate this far away, while still walking (was 60 m)
 LOOT_BOOST = True      # boost-run on loot trips and exploring longer than 15 m ...
 LOOT_BOOST_E = 55.0    # ... while energy is above this (keeps the rest for fights and escapes)
-
-# ---- flying when several enemies are close: hop and jet at random heights so we're not a still target between them
-FLY = True
-FLY_MIN_ENEMIES = 2    # enemy mechs in sight ...
-FLY_NEAR_R = 100.0     # ... within this many metres
-FLY_JET_S = (0.15, 0.6)  # random jet time per hop (s): ~3-8 m high, ~2-9 energy
-FLY_HOP_P = 0.5        # chance per grounded decision to hop again (irregular rhythm)
-FLY_MAX_H = 10.0       # stop jetting this high above the terrain (don't climb onto roofs)
-FLY_RESERVE = 20.0     # never jet below this energy (+25 more when we hold lightning: it fires on energy)
