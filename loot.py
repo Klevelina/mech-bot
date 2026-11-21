@@ -2,8 +2,7 @@
 import math
 
 from config import LIGHTNING_FIRST, PLAYBOOK, DROP_GUN_FOR_PAIR, MORTAR_USE, UPGRADE_BY_LOADOUT, \
-    SQUAD_UPGRADES, POWER, POWER_WEAPON_V, POWER_DRONE_V, POWER_R, POWER_MORE, POWER_CRATE_V, NEAREST_WEAPON, \
-    PILE_BY_LOOT, PILE_CUBE_V, PILE_WEAPON_V
+    POWER, POWER_WEAPON_V, POWER_DRONE_V, POWER_R, POWER_MORE, POWER_CRATE_V
 
 # What a found item is worth before distance (rough "cubes" scale).
 VALUE = {"cube": 3.0, "crate": 2.5, "npc": 5.0, "pile": 6.0}  # a drone drops 2 cubes
@@ -30,16 +29,7 @@ UPGRADES_FOR = {
 }
 
 
-def upgrade_order(weapons, squad=False):
-    order = _loadout_order(weapons)
-    if squad and SQUAD_UPGRADES:
-        # vs the squad: hunters come one at a time and we heal between them -> faster healing and more HP first;
-        # lightning chain needs grouped enemies, so it goes last
-        return SQUAD_UPGRADES + [u for u in order if u != "lightning_chain"] + ["lightning_chain"]
-    return order
-
-
-def _loadout_order(weapons):
+def upgrade_order(weapons):
     kinds = {w["kind"] for w in (weapons or []) if w}
     if "laser" in kinds and "lightning" in kinds:
         key = "hybrid"
@@ -54,9 +44,9 @@ def _loadout_order(weapons):
     return UPGRADES_FOR[key] + UPGRADE_ORDER
 
 
-def pick_upgrade(offer, weapons=None, squad=False):
+def pick_upgrade(offer, weapons=None):
     ids = [c["id"] for c in offer["choices"]]
-    order = upgrade_order(weapons, squad) if (UPGRADE_BY_LOADOUT and weapons is not None) else UPGRADE_ORDER
+    order = upgrade_order(weapons) if (UPGRADE_BY_LOADOUT and weapons is not None) else UPGRADE_ORDER
     for want in order:
         if want in ids:
             return ids.index(want)
@@ -183,19 +173,6 @@ class Memory:
                 d = weapon_take(it["wkind"], weapons, late, False)
                 if d is None:
                     continue
-                if NEAREST_WEAPON and d == "empty":
-                    # any weapon beats an empty slot: the closest one first, same value for every kind
-                    # (swaps to a better one later follow the normal rules below)
-                    v, reach = POWER_WEAPON_V, max(max_dist, POWER_R)
-                    ix, iy = it["x"], it["y"]
-                    dist = math.hypot(ix - x, iy - y)
-                    if dist > reach or danger(ix, iy) or self.reachable_cell(it) < 0 or \
-                            math.hypot(ix - nc[0], iy - nc[1]) > nr - 5 or math.hypot(ix - cc[0], iy - cc[1]) > cr - 5:
-                        continue
-                    s = v / (dist + 30.0)
-                    if s > bs:
-                        best, bs = i, s
-                    continue
                 v = 5.0 if d == "empty" else 3.0
                 if it["wkind"] == "mortar":
                     v = 3.0
@@ -212,13 +189,6 @@ class Memory:
                 if POWER_MORE and k == "crate":
                     v = POWER_CRATE_V  # a cube plus a 50% chance of a weapon
             reach = max_dist
-            if PILE_BY_LOOT and k == "pile" and "cubes" in it:
-                # one of our kills: its cubes, plus the best weapon it carried that we'd take
-                v = PILE_CUBE_V * it["cubes"]
-                if any(weapon_take(wk, weapons, late, False) is not None for wk in it["wkinds"]):
-                    v += PILE_WEAPON_V
-                    if phase != "late":
-                        reach = max(max_dist, POWER_R)  # late game: only close by, like all loot
             if POWER:
                 if k == "pickup" and no_special and it["wkind"] in SPECIALS:
                     v, reach = POWER_WEAPON_V, max(max_dist, POWER_R)  # a good weapon first (any phase)

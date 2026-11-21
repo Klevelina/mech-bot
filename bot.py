@@ -49,7 +49,6 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         self.threat_t = -1e9    # last time an enemy mech was seen / hit us
         self.enemies = {}       # id -> (t, x, y)       (for loot danger)
         self.epos = {}          # id -> (t, pos, vel)   last known 3D state
-        self.einfo = {}         # id -> (weapons, cubes) last seen (what its body will drop)
         self.attackers = {}     # id -> last time it damaged us
         self.att_bearing = {}   # id -> bearing of its latest hit on us
         self.laser_hits = {}    # id -> last time it hit us with a laser (LASER_HIDE)
@@ -122,7 +121,7 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         weapons = me["weapons"]
         act: mf.Action = {"tick": obs["tick"]}
         if obs["offer"]:
-            act["pick"] = pick_upgrade(obs["offer"], me["weapons"], self.situation == "squad")
+            act["pick"] = pick_upgrade(obs["offer"], me["weapons"])
 
         # ---- world model
         self.mem.update(obs)
@@ -131,7 +130,6 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         self.gun_dmg_tick = 0.0
         mechs = [m for m in obs["mechs"] if m["kind"] == "mech"]
         for m in mechs:
-            self.einfo[m["id"]] = (list(m.get("weapons") or []), m.get("cubes", 0) or 0)
             self.enemies[m["id"]] = (t, m["pos"][0], m["pos"][1])
             self.epos[m["id"]] = (t, m["pos"], m["vel"])
         if mechs:
@@ -171,20 +169,12 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
                 if e["type"] == "kill" and e.get("target") in self.epos:
                     # its cubes (+2) and weapons drop where it died: a loot target right away, at the exact spot
                     _, kp, _ = self.epos[e["target"]]
-                    ew, ec = self.einfo.get(e["target"], ([], 0))
                     self.mem.items[("kill", e["target"])] = {"kind": "pile", "x": kp[0], "y": kp[1], "z": kp[2],
-                                                             "seen": t, "cell": None, "ok": None,
-                                                             "wkinds": [k for k in ew if k != "gun"],
-                                                             "cubes": ec + self.cfg["cubes"].get("death_drop_extra", 2)}
+                                                             "seen": t, "cell": None, "ok": None}
                     # it's dead: no longer a danger there (loot), nor a target for blind mortar shells
                     self.enemies.pop(e["target"], None)
                     self.epos.pop(e["target"], None)
                     self.emodel.pos.pop(e["target"], None)
-        self._weapons = weapons
-        role_now = (self.style, tuple(sorted(w["kind"] for w in weapons if w)))
-        if ROLE_COVER and role_now != getattr(self, "_role_cover", None):
-            self._role_cover = role_now
-            self.zone_key = None  # new loadout: re-pick where we wait for its kind of fight
         self.big = POWER and me.get("cubes", 0) >= POWER_BIG_CUBES  # bigger mech, easier to hit: more careful
         if self.big and not getattr(self, "_was_big", False):
             self.zone_key = None  # just got big: re-pick a more enclosed cover spot now
@@ -234,11 +224,7 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
 
         # ---- loot target
         target = None
-        # squad, early phase: only one hunter is out - the safest window to collect cubes, so get back to it sooner
-        early_farm = EARLY_FARM and self.situation == "squad" and self.phase == "early"
-        safe_after, dr, ds = (EARLY_FARM_SAFE, EARLY_FARM_DANGER_R, EARLY_FARM_DANGER_S) if early_farm else \
-            (SAFE_AFTER, DANGER_R, DANGER_S)
-        if LOOT and self.escape is None and t - self.threat_t > safe_after:
+        if LOOT and self.escape is None and t - self.threat_t > SAFE_AFTER:
             if self.target is not None and (self.target not in self.mem.items or t - self.target_since > LOOT_GIVEUP_S):
                 if self.target in self.mem.items:
                     self.mem.banned.add(self.target)  # took too long
@@ -259,7 +245,7 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
                 skip = ()
                 if self.recovering:
                     md, skip = min(md, RECOVER_LOOT_DIST), ("crate", "npc")
-                tid, _ = self.mem.best_target(me, zone, weapons, late, md, lambda ix, iy: self.danger(ix, iy, t, dr, ds), skip,
+                tid, _ = self.mem.best_target(me, zone, weapons, late, md, lambda ix, iy: self.danger(ix, iy, t), skip,
                                               phase=self.phase)
                 if tid != self.target:
                     self.target, self.target_since = tid, t
