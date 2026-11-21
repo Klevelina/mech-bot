@@ -270,8 +270,10 @@ class FightMixin:
         d = math.hypot(m["pos"][0] - x, m["pos"][1] - y)
         if d < GEAR_CLOSE_R:
             return False
-        if "laser" in (m.get("weapons") or []) and d < GEAR_LASER_R:
-            return False
+        if "laser" in (m.get("weapons") or []) and (GEAR_STRICT or d < GEAR_LASER_R):
+            return False  # a laser can hurt us from anywhere in sight
+        if GEAR_STRICT and (m.get("cubes") or 0) > GEAR_MAX_CUBES:
+            return False  # a strong (cube-rich) mech: deal with it
         dealt = sum(a for _, a in self.dmg_log.get(m["id"], ()))
         return dealt < GEAR_HARM_DMG
 

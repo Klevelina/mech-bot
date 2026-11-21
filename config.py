@@ -157,9 +157,11 @@ GEAR_LASER_R = 170.0
 GEAR_CLOSE_R = 55.0
 GEAR_WEAPON_R = 400.0
 GEAR_LASER_SEEK_R = 300.0
+GEAR_STRICT = True     # never harmless: a laser carrier at any distance, or more than GEAR_MAX_CUBES cubes
+GEAR_MAX_CUBES = 3
 # squad all in: gear sweeps (scan.py) - calm: full torso turn every SCAN_EVERY_NOLASER s without a laser (SCAN_EVERY
 # with one); first sweep / no laser yet and energy >= SCAN_JET_E: jump and jet up during it (down to SCAN_JET_STOP)
-SCAN = True
+SCAN = False            # (gear-sweep scored 3.85 vs 4.25 without: sweeps from cover / jet scans likely hurt)
 SCAN_EVERY_NOLASER = 6.0
 SCAN_EVERY = 15.0
 SCAN_JET_E = 90.0
