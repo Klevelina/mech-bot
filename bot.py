@@ -167,7 +167,7 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
                 self.capturers[dr["holder"]] = t
         if SOUNDS:
             self.hear(obs, x, y, t)
-        fighting = t - self.threat_t < 3.0
+        fighting = t - self.threat_t < FIGHTING_S
         # recovery: after a fight, below RECOVER_HP -> no shooting things (it resets the 5 s regen timer),
         # no exploring/hunting; pick up only what needs no shooting, close by; hold cover until healed
         hp_frac = me["hp"] / max(1.0, me["max_hp"])
@@ -186,7 +186,7 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
                                 "mid": (AGGRO_MID_HEAL if EARLY_AGGRO else
                                         (PHASE_MID_HEAL, 0.9) if group_weapon else (None, None)),
                                 "late": (PHASE_LATE_HEAL, 1.0)}[self.phase]
-        if heal_lo is not None and not self.recovering and hp_frac < heal_lo and t - self.threat_t > 3.0:
+        if heal_lo is not None and not self.recovering and hp_frac < heal_lo and t - self.threat_t > HEAL_AFTER_S:
             self.recovering = True
         elif self.recovering and (heal_hi is None or hp_frac >= heal_hi):
             self.recovering = False
@@ -276,7 +276,7 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             dgoal = math.hypot(self.fight_goal[0] - x, self.fight_goal[1] - y)
             stop_r = 3.0
             mode = self.fight_mode
-        elif DROPS and self.nav is not None and t - self.threat_t > 3.0 and self._drop(obs, me, t):
+        elif DROPS and self.nav is not None and t - self.threat_t > DROP_AFTER_S and self._drop(obs, me, t):
             g, stop_r, mode = self._drop_now
             self.set_goal(g, x, y)
             dgoal = math.hypot(g[0] - x, g[1] - y)
