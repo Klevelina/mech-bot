@@ -286,7 +286,14 @@ class FightMixin:
             return None
         eyes = [(o["pos"][0], o["pos"][1], o["pos"][2] + 8.0) for o in in_sight] or \
             [(m["pos"][0], m["pos"][1], m["pos"][2] + 8.0)]
-        c = self.nav.flank_cell(eyes, None, x, y, ALLIN_COVER_R, t_start + 0.010)
+        if RETREAT_WALK:
+            # nearest hidden spot by walking distance, out of sight of up to 4 enemies (head and middle)
+            near4 = sorted(in_sight, key=lambda o: math.hypot(o["pos"][0] - x, o["pos"][1] - y))[:4] or [m]
+            weyes = [(o["pos"][0], o["pos"][1], o["pos"][2] + 8.0) for o in near4]
+            c = self.nav.walk_cover(weyes, x, y, me["stats"].get("height", 9.0), deadline=t_start + 0.014)
+            if c >= 0:
+                return self.nav.center(c)
+        c = self.nav.flank_cell(eyes, None, x, y, ALLIN_COVER_R, t_start + 0.018)
         if c >= 0:
             return self.nav.center(c)
         return self.away_goal(me, m["pos"][0], m["pos"][1], 30.0, t_start)

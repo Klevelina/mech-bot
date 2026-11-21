@@ -135,6 +135,11 @@ ALLIN_UPGRADES_LASER = ["plating", "armor", "laser_damage", "laser_charge", "nan
                         "lightning_efficiency", "lightning_range", "servos", "gun_mag", "gun_velocity", "gyros"]
 ALLIN_UPGRADES = ["plating", "armor", "gun_damage", "nanites", "gun_rate", "lightning_efficiency", "lightning_range",
                   "laser_damage", "servos", "laser_charge", "gun_mag", "gun_velocity", "gyros"]
+# all in: retreat to the hidden spot closest by WALKING distance (out of sight of up to 4 enemies, head and middle)
+RETREAT_WALK = False  # (tested offline: finds fewer hidden spots than flank_cell, not shorter walks)
+ALLIN_FULL_LEAD = True    # all in: always lead the full speed and take long gun shots (no learned lead / holding)
+ALLIN_LOW_RESERVE = True  # all in: lightning fires down to the small late-game energy reserve
+ALLIN_RELOAD = True       # all in: reload whenever nobody is in sight and the magazine is at 60% or less
 KILL_PILE = True       # (any match) our kill drops its cubes (+2) and weapons where it died: loot target right away
 
 DROP_WAIT_CALM = True  # FREE-FOR-ALL ONLY (vs the squad, 2+ enemies at a drop are hunters coming for us, not a fight):

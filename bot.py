@@ -542,7 +542,7 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             # laser and lightning are instant: no lead without a gun, or while the laser charges
             speed = 0.0 if (laser_charging or not LEAD or not has_gun) else self._gun_speed(me)
             zoff = self.hit_zoff(me, m)
-            k = self.aim.lead(m["id"]) if (LEARN_AIM and is_mech) else 1.0
+            k = self.aim.lead(m["id"]) if (LEARN_AIM and is_mech and not (self.all_in and ALLIN_FULL_LEAD)) else 1.0
             tpos = m["pos"]
             if LASER_LEAD_S and speed == 0.0 and laser_charging:
                 # hitscan, but it fires on our next decision: aim where it will be then
@@ -553,10 +553,10 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             if zoff is not None:
                 tt = h / speed if speed else 0.0
                 gun_ok = True
-                if HOLD_DODGY and is_mech and speed and h > 60:
+                if HOLD_DODGY and is_mech and speed and h > 60 and not (self.all_in and ALLIN_FULL_LEAD):
                     # long shot: only if it can't stray further than ~1.5 body radii during the flight
                     gun_ok = self.aim.surprise(m["id"], tt) < 2.5 * scale * 1.5
-                fire = self.fire(me, h, aim, size, is_mech, late, gun_ok)
+                fire = self.fire(me, h, aim, size, is_mech, late or (self.all_in and ALLIN_LOW_RESERVE), gun_ok)
                 if self.late_zone and is_mech and not self.all_in and not self.late_fire_ok(me, m, h, t):
                     fire = [False, False]  # late: keep regenerating, don't start fights we can't end fast
                 if mode == "DROPWATCH" and is_mech and t - self.attackers.get(m["id"], -1e9) > 3.0:
@@ -609,6 +609,9 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             mag = g["stats"].get("mag", 12)
             ammo = g.get("ammo", 0)
             calm = not mechs and shoot is None and ammo < mag / 2
+            if self.all_in and ALLIN_RELOAD and not mechs and shoot is None:
+                # nobody in sight: top up at 60% or less, or anything missing after 3 s of quiet
+                calm = ammo <= 0.6 * mag or (ammo < mag and t - self.threat_t > 3.0)
             pause = RELOAD_IN_PAUSE and mechs and no_shot and ammo < mag * RELOAD_PAUSE_FRAC
             topup = hiding_laser and (not mechs or no_shot) and ammo < mag * LASER_RELOAD_FRAC
             if hidden and any(math.hypot(ex - x, ey - y) < 60.0 for _, ex, ey, _ in self._known_enemies(obs["mechs"], t)):

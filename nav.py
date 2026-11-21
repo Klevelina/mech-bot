@@ -389,6 +389,47 @@ class Nav:
                 return c
         return -1
 
+    def walk_cover(self, eyes, mx, my, body_h=9.0, max_steps=30, max_checks=140, deadline=None):
+        """Hidden spot by WALKING distance: flood outward over walkable cells from us; a cell counts when no eye in
+        `eyes` [(x, y, z)] sees our head or our middle there. Score = 2 x steps - 0.25 x (distance to the nearest eye,
+        up to 80 m): close to walk to, not right next to them. Returns a cell or -1."""
+        start = self.cell_of(mx, my)
+        if self.comp[start] != self.main:
+            start = self.nearest_main(mx, my)
+        mask, offs, surf = self.mask, self.offs, self.surf
+        steps = {start: 0}
+        queue = [start]
+        best, bs = -1, 1e18
+        checked = 0
+        qi = 0
+        while qi < len(queue) and checked < max_checks:
+            c = queue[qi]
+            qi += 1
+            st = steps[c]
+            if st > max_steps or (best >= 0 and st * 2 > bs + 30):
+                break
+            j, i = divmod(c, self.W)
+            if st > 0 and (i + j) % 2 == 0 and self.in_safe(c):
+                checked += 1
+                cx, cy = self.center(c)
+                z0 = surf[c]
+                if not any(self.los(ex, ey, ez, cx, cy, z0 + body_h, skip=1.0) or
+                           self.los(ex, ey, ez, cx, cy, z0 + body_h * 0.5, skip=1.0) for ex, ey, ez in eyes):
+                    near = min(math.hypot(ex - cx, ey - cy) for ex, ey, _ in eyes)
+                    s = st * 2 - 0.25 * min(near, 80.0)
+                    if s < bs:
+                        best, bs = c, s
+                if deadline is not None and checked & 7 == 0 and time.perf_counter() > deadline:
+                    break
+            m = mask[c]
+            for k in range(8):
+                if m & (1 << k):
+                    n = c + offs[k]
+                    if n not in steps:
+                        steps[n] = st + 1
+                        queue.append(n)
+        return best
+
     def penalize(self, x: float, y: float, radius_cells: int = 2, amount: float = 25.0) -> None:
         j0, i0 = divmod(self.cell_of(x, y), self.W)
         for dj in range(-radius_cells, radius_cells + 1):
