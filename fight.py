@@ -405,32 +405,24 @@ class FightMixin:
         px, py = self.clamp_safe(pos[0] + r * math.cos(a), pos[1] + r * math.sin(a))
         return self.nav.center(self.nav.nearest_main(px, py))
 
-    # ---------- home base ambush
-    def at_base(self, me):
-        c = self.cover
-        return BASE and c is not None and math.hypot(me["pos"][0] - c[0], me["pos"][1] - c[1]) < BASE_AT_R
-
-    def ambushing(self, me, t):
-        """At the base with an enemy around: hold for AMBUSH_WAIT s (they come to us) before hunting."""
-        if not (BASE_AMBUSH and self.at_base(me)):
-            self.ambush_t = None
-            return False
-        if self.ambush_t is None or t - self.threat_t > 10.0:
-            self.ambush_t = t
-        return t - self.ambush_t < AMBUSH_WAIT
-
     def update_fight_goal(self, me, m, t, t_start):
         """Where to stand against target m, by our loadout. None = keep the normal goal (cover)."""
         if not PLAYSTYLE or self.nav is None or m is None:
             self.fight_goal = None
             return
-        if t - self.fight_goal_t < 1.0 and m["id"] == self.fight_goal_id:
-            return  # same target: refresh once a second; new target: right away
-        self.fight_goal_t = t
-        self.fight_goal_id = m["id"]
         x, y = me["pos"][0], me["pos"][1]
         ex, ey = m["pos"][0], m["pos"][1]
         d = math.hypot(ex - x, ey - y)
+        # same target: refresh once a second, or fast while it closes on us / is inside our band; new target: now
+        every = 1.0
+        if FIGHT_FAST_S and m["kind"] == "mech":
+            closing = (m["vel"][0] * (x - ex) + m["vel"][1] * (y - ey)) / max(d, 1.0) > FIGHT_CLOSING_V
+            if closing or d < band(our_role(me["weapons"]), m.get("weapons"))[0]:
+                every = FIGHT_FAST_S
+        if t - self.fight_goal_t < every and m["id"] == self.fight_goal_id:
+            return
+        self.fight_goal_t = t
+        self.fight_goal_id = m["id"]
         theirs = set(m.get("weapons") or [])
         hp_frac = me["hp"] / max(1.0, me["max_hp"])
         goal = None
@@ -442,8 +434,7 @@ class FightMixin:
                 return
 
         # pick the fight: a lone enemy, nobody else on us, we're healthy -> close to our weapon's range
-        if HUNT and m["kind"] == "mech" and hp_frac > HUNT_HP and not self.late_zone and \
-                not self.ambushing(me, t):
+        if HUNT and m["kind"] == "mech" and hp_frac > HUNT_HP and not self.late_zone:
             n_visible = sum(1 for o in self._obs_mechs if o["kind"] == "mech")
             others_on_us = any(i != m["id"] and t - at < 4.0 for i, at in self.attackers.items())
             # anyone else seen/heard near us lately (squad reinforcements)? sounds near the target are its own
@@ -502,9 +493,6 @@ class FightMixin:
                     self.fight_mode = "AVOID"
                     return
         self.fight_mode = "FIGHTMOVE"
-        if BASE_AMBUSH and m["kind"] == "mech" and self.at_base(me):
-            self.fight_goal = None  # hold the base: it's where we're strongest
-            return
         if PLAYBOOK and m["kind"] == "mech":
             # too close for this matchup -> back off to the band (behind cover if one is near)
             lo, hi = band(our_role(me["weapons"]), theirs)
