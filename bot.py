@@ -19,10 +19,9 @@ from senses import SensesMixin
 from drops import DropsMixin
 from fight import FightMixin
 from evade import EvadeMixin
-from roof import RoofMixin
 
 
-class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, RoofMixin):
+class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin):
     name = "mech-fight"
 
     def __init__(self, hello: mf.Hello):
@@ -78,17 +77,7 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, RoofMixin)
         self.finish = None      # [enemy id, keep-chasing-until t, last pos] for a fleeing low-HP enemy
         self.finish_m = None
         self.finish_now = None
-        self.roofs = []
-        if ROOF and self.nav is not None:
-            try:
-                self.roofs = self.nav.find_roofs(deadline=time.perf_counter() + 4.0)
-            except Exception:
-                mf.log("roof analysis failed: " + traceback.format_exc())
-        self.roof_plan = None
-        self.roof_next = None
-        self.roof_leave_t = None
-        self.roof_key = None
-        self.climb_t = None
+        self.want_reload = False  # set by hunting: reload before going in
         self.snd_i = 0
         self.drop_target = None
         self.drop_since = 0.0
@@ -159,6 +148,9 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, RoofMixin)
             self.nav.safe = (sc[0], sc[1], max(sr - 4.0, 5.0))
         self.aim.observe(t, obs["mechs"])
         self.style = self.loadout_style(weapons)
+        # a visible enemy with lightning within 50 m: its arc would cancel a laser charge (playbook)
+        self.lit_near = any(o["kind"] == "mech" and "lightning" in (o.get("weapons") or []) and
+                            math.hypot(o["pos"][0] - x, o["pos"][1] - y) < 50.0 for o in obs["mechs"])
         self.mark_seen(x, y)
         for dr in obs.get("drops", []):
             if dr.get("holder") is not None and dr["holder"] != me["id"]:
@@ -169,12 +161,6 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, RoofMixin)
         late = obs["alive"] <= 5 or zone["next_radius"] <= 70
         self.late_zone = LATE_GAME and zone["next_radius"] <= LATE_RADIUS
         self.update_escape(me, mechs, t, t_start)
-        roof = self.roof_step(me, zone, t)
-        roof_hold = roof is not None and roof[2] in ("ROOF", "CLIMB", "CHARGE")
-        if roof_hold:
-            self.escape = None  # on the roof (or going up): stay, shoot what gets a line on us
-        if roof is None or roof[2] != "CLIMB":
-            self.climb_t = None
 
         # ---- cover goal for the current circle
         key = (round(zone["next_center"][0], 1), round(zone["next_center"][1], 1), round(zone["next_radius"], 1))
@@ -232,20 +218,11 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, RoofMixin)
             self.fight_goal = None
             self.fight_goal_id = None
         safe = t - self.threat_t > SAFE_AFTER
-        if roof_hold:
-            g, stop_r, mode = roof[0], roof[1], roof[2]
-            self.set_goal(g, x, y)
-            dgoal = math.hypot(g[0] - x, g[1] - y)
-            self.fight_goal = None
-        elif self.escape is not None:
+        if self.escape is not None:
             self.set_goal(self.escape["goal"], x, y)
             dgoal = math.hypot(self.escape["goal"][0] - x, self.escape["goal"][1] - y)
             stop_r = 1.5
             mode = "ESCAPE"
-        elif roof is not None and ROOF_RUSH:  # walking to the foot of the roof's wall
-            g, stop_r, mode = roof[0], roof[1], roof[2]
-            self.set_goal(g, x, y)
-            dgoal = math.hypot(g[0] - x, g[1] - y)
         elif contesting:
             g = self.contest[0]
             self.set_goal(g, x, y)
@@ -263,10 +240,6 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, RoofMixin)
             dgoal = math.hypot(self.fight_goal[0] - x, self.fight_goal[1] - y)
             stop_r = 3.0
             mode = self.fight_mode
-        elif roof is not None:  # walking to the foot of the roof's wall (low priority)
-            g, stop_r, mode = roof[0], roof[1], roof[2]
-            self.set_goal(g, x, y)
-            dgoal = math.hypot(g[0] - x, g[1] - y)
         elif DROPS and self.nav is not None and t - self.threat_t > 3.0 and self._drop(obs, me, t):
             g, stop_r, mode = self._drop_now
             self.set_goal(g, x, y)
@@ -354,26 +327,15 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, RoofMixin)
                 move = [dx / d, dy / d]
         moving = move != [0.0, 0.0]
         jinking, extra_boost = self.evade(obs, me, move, t)
-        if jinking and not roof_hold:
+        if jinking:
             move = jinking
-        climbing = roof_hold and mode in ("CLIMB", "CHARGE")
-        if climbing:
-            move = list(roof[3])
 
         # ---- stuck detection
         self.hist.append((t, x, y))
         jump = False
         boost = not me["in_zone"] or (self.escape is not None and me["energy"] > 30) or extra_boost or \
             (mode == "CONTEST" and dgoal > 6.0 and me["energy"] > 40) or             (mode == "FINISH" and dgoal > 8.0 and me["energy"] > 30)
-        if roof is not None and mode in ("TO_ROOF", "CHARGE"):
-            boost = boost and not me["in_zone"]  # save energy for the climb
-        if climbing or (roof_hold and not me["grounded"]):
-            self.hist.clear()  # vertical progress only: don't let the stuck detector fire
-            self.unstick = 0
-        if climbing:
-            jump = mode == "CLIMB" and me["grounded"]
-            boost = mode == "CLIMB" and not me["grounded"]  # in the air, boost = jets
-        elif self.unstick > 0:
+        if self.unstick > 0:
             self.unstick -= 1
             boost = True
             jump = me["grounded"]
@@ -437,6 +399,7 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, RoofMixin)
             act["fire"] = self.fire(me, h, aim, shoot[3], False)
 
         # ---- fight
+        no_shot = False
         if mechs:
             m = fight_m
             if m["id"] != self.cur:
@@ -449,11 +412,14 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, RoofMixin)
             scale = 1.0 + self.size_per_cube * m.get("cubes", 0) if is_mech else 1.0
             size = 2.5 * scale if is_mech else 1.8
             laser_charging = any(w and w["kind"] == "laser" and w.get("charge", 0) > 0 for w in weapons)
-            speed = 0.0 if (laser_charging or not LEAD) else self._gun_speed(me)  # laser is hitscan
+            has_gun = any(w and w["kind"] == "gun" for w in weapons)
+            # laser and lightning are instant: no lead without a gun, or while the laser charges
+            speed = 0.0 if (laser_charging or not LEAD or not has_gun) else self._gun_speed(me)
             zoff = self.hit_zoff(me, m)
             k = self.aim.lead(m["id"]) if (LEARN_AIM and is_mech) else 1.0
             aim, h = self.aim_at(me, m["pos"], m["vel"], zoff if zoff is not None else 4.5 * scale, speed, k)
             act["aim"] = aim
+            no_shot = zoff is None  # target behind cover right now: a free moment to reload
             if zoff is not None:
                 tt = h / speed if speed else 0.0
                 gun_ok = True
@@ -472,10 +438,16 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, RoofMixin)
             self.cur = None
             self.fire_since.clear()
 
-        # ---- reload when calm
-        g = weapons[0] if weapons[0] and weapons[0]["kind"] == "gun" else None
-        if g and not mechs and shoot is None and g.get("reload", 0) == 0 and g.get("ammo", 0) < g["stats"].get("mag", 12) / 2:
-            act["reload"] = True
+        # ---- reload: when calm, during a pause in a fight, or before picking one (never while landing shots)
+        g = next((w for w in weapons if w and w["kind"] == "gun"), None)
+        if g and g.get("reload", 0) == 0:
+            mag = g["stats"].get("mag", 12)
+            ammo = g.get("ammo", 0)
+            calm = not mechs and shoot is None and ammo < mag / 2
+            pause = RELOAD_IN_PAUSE and mechs and no_shot and ammo < mag * RELOAD_PAUSE_FRAC
+            if calm or pause or self.want_reload:
+                act["reload"] = True
+        self.want_reload = False
 
         # ---- debug
         if self.path:

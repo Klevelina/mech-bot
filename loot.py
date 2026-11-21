@@ -1,7 +1,7 @@
 """Loot: remember items we have seen, pick what to go for, weapon swap rules, upgrade picks."""
 import math
 
-from config import LIGHTNING_FIRST
+from config import LIGHTNING_FIRST, PLAYBOOK, DROP_GUN_FOR_PAIR
 
 # What a found item is worth before distance (rough "cubes" scale).
 VALUE = {"cube": 3.0, "crate": 2.5, "npc": 5.0}  # a drone drops 2 cubes
@@ -44,6 +44,8 @@ def weapon_take(kind, weapons, late, fighting):
         return 1
     if s0 == "mortar":
         return 0
+    if PLAYBOOK and DROP_GUN_FOR_PAIR and s0 == "gun" and s1 in SPECIALS and kind != s1:
+        return 0  # playbook target loadout: laser + lightning, the gun goes
     pref = "lightning" if (late or LIGHTNING_FIRST) else "laser"  # lightning chains through groups
     if late and s0 == "gun":
         return 0  # gun out, second special in
@@ -133,6 +135,12 @@ class Memory:
                 v = 5.0 if d == "empty" else 3.0
                 if LIGHTNING_FIRST and it["wkind"] == "lightning":
                     v += 2.0
+                if PLAYBOOK:
+                    held = {w["kind"] for w in weapons if w}
+                    if DROP_GUN_FOR_PAIR and held & set(SPECIALS) and it["wkind"] not in held:
+                        v = 7.0  # completes laser + lightning
+                    elif not held & set(SPECIALS):
+                        v = max(v, 6.0)  # first special of any kind: both are a big step up from the gun
             else:
                 v = VALUE[k]
             ix, iy = it["x"], it["y"]

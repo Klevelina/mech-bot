@@ -210,8 +210,6 @@ class Nav:
                     break
 
         self.surf, self.roof, self.blocked, self.mask, self.extra, self.comp = surf, roof, blocked, mask, extra, comp
-        self.ground = ground
-        self.comp_sizes = sizes
         self.ftop, self.fbase, self.sub, self.SW, self.SH = ftop, fbase, sub, SW, SH
         self.cover = cover
         self.build_s = time.perf_counter() - t0
@@ -261,16 +259,14 @@ class Nav:
                 return best
         return c0
 
-    def exposure(self, c, rays=12, reach=60.0, far=200.0):
+    def exposure(self, c, rays=12, reach=60.0):
         """How open cell c is: of `rays` horizontal directions from eye height, how many see `reach` m
-        without hitting a building or terrain. Open rays keep going (coarser steps) up to `far` m to measure the view.
-        Returns (open count, yaw of the mean open direction or None, longest view m, yaw of the longest view)."""
+        without hitting a building or terrain. Returns (open count, yaw to face = mean open direction or None)."""
         cx, cy = self.center(c)
         z0 = self.surf[c] + 8.0
         ftop, fbase, SW, SH, ox, oy, sub = self.ftop, self.fbase, self.SW, self.SH, self.ox, self.oy, self.sub
         hm, tnx, tny, tx0, ty0, ts, hsc = self.hm, self.tnx, self.tny, self.tx0, self.ty0, self.ts, self.hsc
         n_open, sx, sy = 0, 0.0, 0.0
-        best_view, best_yaw = 0.0, None
         for k in range(rays):
             a = 2 * math.pi * k / rays
             dx, dy = math.cos(a), math.sin(a)
@@ -295,93 +291,8 @@ class Nav:
                 n_open += 1
                 sx += dx
                 sy += dy
-                # how far does this open direction see? (overwatch: long views to spot attackers early)
-                while d <= far:
-                    px, py = cx + dx * d, cy + dy * d
-                    i, j = int((px - ox) / sub), int((py - oy) / sub)
-                    if not (0 <= i < SW and 0 <= j < SH):
-                        break
-                    fc = j * SW + i
-                    if fbase[fc] <= z0 <= ftop[fc]:
-                        break
-                    vi, vj = int((px - tx0) / ts + 0.5), int((py - ty0) / ts + 0.5)
-                    if 0 <= vi < tnx and 0 <= vj < tny and hm[vj * tnx + vi] * hsc > z0:
-                        break
-                    d += 4.0
-                if d > best_view:
-                    best_view, best_yaw = min(d, far), a
         face = math.atan2(sy, sx) if n_open else None
-        return n_open, face, best_view, best_yaw
-
-    def find_roofs(self, min_cells=30, min_h=6.0, max_h=45.0, deadline=None):
-        """Flat roofs we could camp on: walkable components other than the ground, 6-45 m above the ground around
-        them, big enough to stand back from the edge. For each: the camping spot least visible from the ground
-        (tested from 32 ground points 25-150 m around), and the best climb point (ground cell at the wall foot,
-        lowest wall). Returns a list of dicts sorted by exposure."""
-        W, H, N = self.W, self.H, self.N
-        comp, surf, ground, roof = self.comp, self.surf, self.ground, self.roof
-        cells_by = {}
-        for c in range(N):
-            k = comp[c]
-            if k >= 0 and k != self.main and roof[c]:
-                cells_by.setdefault(k, []).append(c)
-        out = []
-        offs4 = [1, -1, W, -W]
-        for k, cells in cells_by.items():
-            if len(cells) < min_cells:
-                continue
-            if deadline is not None and time.perf_counter() > deadline:
-                break
-            cs = set(cells)
-            top = sum(surf[c] for c in cells) / len(cells)
-            # climb points: ground (main) cells next to this roof; wall height = roof - ground there
-            climbs = []
-            for c in cells:
-                for o in self.offs:
-                    n = c + o
-                    if 0 <= n < N and comp[n] == self.main:
-                        h = surf[c] - surf[n]
-                        if min_h <= h <= max_h:
-                            climbs.append((h, n, c))
-            if not climbs:
-                continue
-            # interior: two steps from any edge
-            inner = [c for c in cells if all((c + o) in cs and all((c + o + o2) in cs for o2 in offs4) for o in offs4)]
-            if not inner:
-                continue
-            cx = sum(self.center(c)[0] for c in inner) / len(inner)
-            cy = sum(self.center(c)[1] for c in inner) / len(inner)
-            inner.sort(key=lambda c: (self.center(c)[0] - cx) ** 2 + (self.center(c)[1] - cy) ** 2)
-            picks = inner[:1] + inner[len(inner) // 3:len(inner) // 3 + 1] + inner[-1:]
-            best = None
-            for c in picks:
-                px, py = self.center(c)
-                z_top, z_mid = surf[c] + 9.0, surf[c] + 4.5
-                seen = total = 0.0
-                for dist, wgt in ((25.0, 3.0), (50.0, 2.0), (90.0, 1.5), (150.0, 1.0)):
-                    for a_i in range(8):
-                        a = a_i * math.pi / 4 + (0.39 if dist in (50.0, 150.0) else 0.0)
-                        vx, vy = px + dist * math.cos(a), py + dist * math.sin(a)
-                        vc = self.cell_of(vx, vy)
-                        if comp[vc] != self.main:
-                            continue
-                        eye = surf[vc] + 8.0
-                        total += wgt
-                        if self.los(vx, vy, eye, px, py, z_top, skip=1.0, step=2.0) or                                 self.los(vx, vy, eye, px, py, z_mid, skip=1.0, step=2.0):
-                            seen += wgt
-                expo = seen / total if total else 1.0
-                if best is None or expo < best[0]:
-                    best = (expo, c)
-            expo, spot = best
-            sx, sy = self.center(spot)
-            # climb: lowest wall, then nearest to the spot
-            climbs.sort(key=lambda h_n_c: (round(h_n_c[0] / 3.0), (self.center(h_n_c[1])[0] - sx) ** 2 +
-                                           (self.center(h_n_c[1])[1] - sy) ** 2))
-            h, gcell, rcell = climbs[0]
-            out.append({"comp": k, "spot": spot, "pos": (sx, sy), "top": surf[spot], "expo": expo, "wall": h,
-                        "climb": gcell, "edge": rcell, "cells": len(cells)})
-        out.sort(key=lambda r: r["expo"])
-        return out
+        return n_open, face
 
     safe = None  # (cx, cy, r): hiding/flanking spots must be inside this circle (set by the bot from the zone)
 

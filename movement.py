@@ -38,12 +38,8 @@ class MoveMixin:
                 e = self.expo.get(c)
                 if e is None:
                     e = self.expo[c] = nav.exposure(c)
-                n_open, face, view, view_yaw = e
+                n_open, face = e
                 s += EXPO_W * n_open + (10.0 if n_open == 0 else 0.0)  # fully enclosed: can't see anyone coming
-                if OVERWATCH and n_open:
-                    # few open directions, but a long view down one of them: see them coming, already aimed
-                    s -= OVERWATCH_W * min(view, 200.0) / 200.0
-                    face = view_yaw
                 if s < bs:
                     best, bs, bface = c, s, face
         self.cover_face = bface
