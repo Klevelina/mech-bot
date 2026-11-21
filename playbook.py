@@ -6,7 +6,7 @@ inside -> stand and fight. The weapon triangle: lightning beats laser (shorts it
 (cook-off +60%, outranges it), mortar beats lightning (knock-back, energy drain); the gun is neutral and
 lands ~100% within 40 m but only 30-55% beyond 120 m against dodgers (offline aim range)."""
 
-ROLES = ("gun", "brawler", "sniper", "hybrid")
+ROLES = ("gun", "brawler", "sniper", "hybrid", "artillery")
 
 # (our role, their main weapon) -> (min m, max m)
 BANDS = {
@@ -29,6 +29,11 @@ BANDS = {
     ("hybrid", "lightning"): (60.0, 180.0),
     ("hybrid", "laser"): (0.0, 40.0),
     ("hybrid", "mortar"): (100.0, 200.0),
+
+    ("artillery", "gun"): (70.0, 180.0),        # gun + mortar: lob from range, never inside our own splash
+    ("artillery", "lightning"): (60.0, 180.0),  # mortar beats lightning (knock-back, energy drain)
+    ("artillery", "laser"): (0.0, 45.0),        # laser +60% on mortar carriers: rush it with the gun
+    ("artillery", "mortar"): (70.0, 180.0),
 }
 
 
@@ -41,6 +46,8 @@ def our_role(weapons):
         return "brawler"
     if las:
         return "sniper"
+    if "mortar" in kinds:
+        return "artillery"
     return "gun"
 
 

@@ -73,3 +73,19 @@ RELOAD_IN_PAUSE = True   # target behind cover for the moment: reload if the mag
 RELOAD_PAUSE_FRAC = 0.6
 RELOAD_BEFORE_HUNT = True  # gun-only: don't go hunting with less than this fraction of a magazine; reload first
 RELOAD_HUNT_FRAC = 0.5
+
+# ---- map & items
+MORTAR_USE = True      # take a mortar into an empty slot; lob over cover / at slow or bunched targets
+MORTAR_MIN_DIST = 25.0  # never shell anything closer (our own splash and knock-back)
+MORTAR_MAX_DIST = 230.0
+DODGE_MORTAR = True    # leave the predicted landing spot of incoming shells (laser sidestep stays with DODGE)
+DEATH_PILES = True     # a death sound marks a loot target (its cubes + 2 and weapons)
+OPENING_SCAN = True    # first 3 s: spin the torso once to spot loot and the first hunter
+PILE_FINISH = True     # an enemy within 30 m of a known death pile below PILE_FINISH_HP: finish it (and take the pile)
+PILE_FINISH_HP = 0.45
+
+# ---- recovery after fights
+RECOVER = True         # below RECOVER_HP with no fight for 3 s: heal up before looting far / exploring / hunting
+RECOVER_HP = 0.7
+RECOVER_UNTIL = 0.95
+RECOVER_LOOT_DIST = 60.0  # while healing: only cubes / weapons / piles this close (no crates or drones: shooting resets regen)

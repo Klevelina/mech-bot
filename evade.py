@@ -24,7 +24,7 @@ class EvadeMixin:
             return None, False
         x, y, z = me["pos"]
         mechs = [m for m in obs["mechs"] if m["kind"] == "mech"]
-        if DODGE:
+        if DODGE or DODGE_MORTAR:
             mw = self.wcfg.get("mortar", {})
             for pr in obs["projectiles"]:
                 if pr["kind"] != "mortar":

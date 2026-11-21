@@ -356,23 +356,31 @@ class FightMixin:
         vis = {m["id"]: m for m in mechs}
         if self.finish is None:
             for m in mechs:
-                if not m.get("hp") or not m.get("max_hp") or m["hp"] / m["max_hp"] >= FINISH_HP:
+                if not m.get("hp") or not m.get("max_hp"):
                     continue
+                frac = m["hp"] / m["max_hp"]
                 ex, ey = m["pos"][0], m["pos"][1]
+                # a weak one heading for a death pile we know about: take it, and the pile
+                near_pile = PILE_FINISH and frac < PILE_FINISH_HP and any(
+                    it["kind"] == "pile" and math.hypot(it["x"] - ex, it["y"] - ey) < 30.0
+                    for it in self.mem.items.values())
+                if frac >= FINISH_HP and not near_pile:
+                    continue
                 d = math.hypot(ex - x, ey - y) or 1.0
                 leaving = (m["vel"][0] * (ex - x) + m["vel"][1] * (ey - y)) / d > 1.0
-                if leaving or not self.can_hit(me, m):
-                    self.finish = [m["id"], t + FINISH_S, list(m["pos"])]
+                if leaving or not self.can_hit(me, m) or near_pile:
+                    self.finish = [m["id"], t + FINISH_S, list(m["pos"]), frac]
                     break
         if self.finish is None:
             return None
-        fid, until, pos = self.finish
+        fid, until, pos = self.finish[:3]
         if any(i != fid and t - at < 3.0 for i, at in self.attackers.items()):
             self.finish = None  # someone else is on us: not the time to chase
             return None
         m = vis.get(fid)
         if m is not None:
-            if m.get("hp") and m.get("max_hp") and m["hp"] / m["max_hp"] > FINISH_HP * 1.6:
+            start_frac = self.finish[3] if len(self.finish) > 3 else FINISH_HP
+            if m.get("hp") and m.get("max_hp") and m["hp"] / m["max_hp"] > max(FINISH_HP, start_frac) * 1.6:
                 self.finish = None  # it healed (drop?): not a quick kill any more
                 return None
             pos = self.finish[2] = list(m["pos"])

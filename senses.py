@@ -18,6 +18,15 @@ class SensesMixin:
     def hear(self, obs, x, y, t):
         for s in obs.get("sounds", []):
             kind, band = s.get("kind"), s.get("dist")
+            if DEATH_PILES and kind == "death" and band in ("near", "mid"):
+                # a mech died there: its cubes (+2) and weapons lie on the ground -> a loot target
+                b0, th0, dd = s["bearing"], t - s.get("age", 0.0), BAND_DIST[band]
+                px, py = x + dd * math.cos(b0), y + dd * math.sin(b0)
+                gz = self.nav.ground_z(px, py) if self.nav is not None else 0.0
+                self.mem.items[("pile", self.snd_i)] = {"kind": "pile", "x": px, "y": py, "z": gz, "seen": th0,
+                                                        "cell": None, "ok": None}
+                self.snd_i += 1
+                continue
             base = SOUND_PRIO.get(kind)
             if base is None or band not in BAND_MULT:
                 continue
