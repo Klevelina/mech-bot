@@ -413,6 +413,8 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         if mode == "HIDDEN":
             boost = False  # silent: no boost / jet noise ...
             move = [move[0] * VANISH_WALK, move[1] * VANISH_WALK]  # ... and no footsteps (under 5 m/s)
+        if mode == "RUSH" and dgoal > 25.0 and me["energy"] > 30:
+            boost = True  # finish rush: get there before it gets away / heals
         if mode == "DISENGAGE" and dgoal > 3.0 and me["energy"] > 30:
             boost = True  # reach the hiding spot fast
         if LOOT_BOOST and mode in ("cube", "pickup", "crate", "npc", "pile", "explore") and dgoal > 15.0 and \

@@ -72,6 +72,22 @@ FOCUS_STICK = 120.0    # ... minus this for our current target
 FOCUS_HITME = 40.0     # ... minus this if it hit us in the last 4 s
 FOCUS_CLOSING = 15.0   # ... minus this if it's coming at us faster than 3 m/s
 FOCUS_MAX_D = 240.0    # only targets this close
+# squad: engage and pursue - go after an enemy that's inside our matchup's distance band (playbook), recently hit us,
+# is coming at us, is badly hurt, or is aiming at us with a clear line - no "alone and odds 1.5" requirement.
+# Close to the band; if it ducks out of our line of fire, follow it until we see it again
+ENGAGE = True
+ENGAGE_BAND_MIN = 45.0   # "inside our band": its upper edge, but at least this many m
+ENGAGE_HIT_S = 5.0       # ... or it hit us this recently
+ENGAGE_CLOSING = (3.0, 150.0)  # ... or it comes at us faster than this (m/s) within this (m)
+ENGAGE_WEAK = (0.35, 150.0)    # ... or below this HP fraction within this
+ENGAGE_AIMED_R = 170.0   # ... or its torso points at us with a clear line between us, within this
+ENGAGE_MIN_HP = 0.4      # not below this HP fraction (our retreat / hide rules take over)
+# squad: finish rush - an enemy below FINISH_RUSH_HP of its max: get close (FINISH_RUSH_R by our weapon) and finish it,
+# while our HP is above FINISH_RUSH_MIN and at most 2 enemies are in sight within 150 m; boost in from further away
+FINISH_RUSH = True
+FINISH_RUSH_HP = 0.35
+FINISH_RUSH_MIN = 0.45
+FINISH_RUSH_R = {"gun": 18.0, "lightning": 22.0, "laser": 35.0}  # laser is hitscan: no need to be on top of it
 KILL_PILE = True       # (any match) our kill drops its cubes (+2) and weapons where it died: loot target right away
 
 DROP_WAIT_CALM = True  # FREE-FOR-ALL ONLY (vs the squad, 2+ enemies at a drop are hunters coming for us, not a fight):

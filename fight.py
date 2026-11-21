@@ -208,6 +208,37 @@ class FightMixin:
                 best, bs = m, s
         return best
 
+    def engage_goal(self, me, m, t, d, theirs):
+        """ENGAGE (squad): ((x, y), mode) to go at enemy m, or None to leave the position to the other rules.
+        In our line of fire and further than our range: close in. Out of our line of fire: pursue it."""
+        x, y = me["pos"][0], me["pos"][1]
+        ex, ey = m["pos"][0], m["pos"][1]
+        to_me = math.atan2(y - ey, x - ex)
+        closing = (m["vel"][0] * (x - ex) + m["vel"][1] * (y - ey)) / max(d, 1.0)
+        hp = m.get("hp") or 1400.0
+        weak_f, weak_r = ENGAGE_WEAK
+        near = ENGAGE_BAND_MIN
+        if PLAYBOOK:
+            near = max(near, band(our_role(me["weapons"]), theirs)[1])
+        engage = d < near or t - self.attackers.get(m["id"], -1e9) < ENGAGE_HIT_S or \
+            (closing > ENGAGE_CLOSING[0] and d < ENGAGE_CLOSING[1]) or \
+            (m.get("max_hp") and hp < weak_f * m["max_hp"] and d < weak_r) or \
+            (d < ENGAGE_AIMED_R and abs(wrap(m["aim"][0] - to_me)) < 0.25 and self.can_hit(me, m))
+        if not engage:
+            return None
+        pref = HUNT_RANGE.get(self.style, 70.0)
+        if PLAYBOOK:
+            lo, hi = band(our_role(me["weapons"]), theirs)
+            pref = max(15.0, (lo + hi) / 2.0)
+        if self.can_hit(me, m):
+            if d <= pref + 10.0:
+                return None  # in range with a shot: the usual in-fight positioning
+            r, mode = pref, "ENGAGE"
+        else:
+            r, mode = min(pref, d) * 0.6, "PURSUE"  # it ducked out of our line of fire: go where we see it again
+        px, py = self.clamp_safe(ex + r * math.cos(to_me), ey + r * math.sin(to_me))
+        return self.nav.center(self.nav.nearest_main(px, py)), mode
+
     def pick_target_focus(self, me, mechs, t):
         """FOCUS (squad): the enemy mech we can hit that's closest to dying, sticking to our current target.
         None if no enemy mech is in our line of fire."""
@@ -515,8 +546,9 @@ class FightMixin:
         if not PLAYSTYLE or self.nav is None or m is None:
             self.fight_goal = None
             return
-        if t - self.fight_goal_t < 1.0 and m["id"] == self.fight_goal_id:
-            return  # same target: refresh once a second; new target: right away
+        rushing = FINISH_RUSH and self.fight_mode == "RUSH" and t - self.fight_goal_t >= 0.3
+        if t - self.fight_goal_t < 1.0 and m["id"] == self.fight_goal_id and not rushing:
+            return  # same target: refresh once a second (0.3 s while rushing it); new target: right away
         self.fight_goal_t = t
         self.fight_goal_id = m["id"]
         x, y = me["pos"][0], me["pos"][1]
@@ -531,6 +563,18 @@ class FightMixin:
             if g is not None:
                 self.fight_goal, self.fight_mode = g, "FIELD"
                 return
+
+        if FINISH_RUSH and getattr(self, "situation", "") == "squad" and m["kind"] == "mech" and \
+                hp_frac > FINISH_RUSH_MIN and m.get("hp") and m.get("max_hp") and \
+                m["hp"] < FINISH_RUSH_HP * m["max_hp"] and \
+                sum(1 for o in self._obs_mechs if o["kind"] == "mech" and
+                    math.hypot(o["pos"][0] - x, o["pos"][1] - y) < 150.0) <= 2:
+            # nearly dead: get in close and finish it (a kill drops its cubes + 2, and it can't heal back up)
+            a = math.atan2(y - ey, x - ex)
+            r = min(FINISH_RUSH_R.get(self.style, 20.0), d)
+            px, py = self.clamp_safe(ex + r * math.cos(a), ey + r * math.sin(a))
+            self.fight_goal, self.fight_mode = self.nav.center(self.nav.nearest_main(px, py)), "RUSH"
+            return
 
         # pick the fight: a lone enemy, nobody else on us, we're healthy -> close to our weapon's range
         aggro = EARLY_AGGRO and getattr(self, "phase", "") == "early"
@@ -585,6 +629,13 @@ class FightMixin:
                     self.fight_goal = self.nav.center(c)
                     self.fight_mode = "DISENGAGE"
                     return
+
+        if ENGAGE and getattr(self, "situation", "") == "squad" and m["kind"] == "mech" and \
+                not self.recovering and not self.late_zone and hp_frac > ENGAGE_MIN_HP:
+            g = self.engage_goal(me, m, t, d, theirs)
+            if g is not None:
+                self.fight_goal, self.fight_mode = g
+                return
 
         if WEIGH_THREATS and self.active:
             def eye(o):
