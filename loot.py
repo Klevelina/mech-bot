@@ -44,13 +44,16 @@ def upgrade_order(weapons):
     return UPGRADES_FOR[key] + UPGRADE_ORDER
 
 
-def pick_upgrade(offer, weapons=None, all_in=False):
+def pick_upgrade(offer, weapons=None, all_in=False, cubes=0):
     ids = [c["id"] for c in offer["choices"]]
     order = upgrade_order(weapons) if (UPGRADE_BY_LOADOUT and weapons is not None) else UPGRADE_ORDER
     if all_in:
         import config
         laser = any(w and w["kind"] == "laser" for w in (weapons or []))
         order = (config.ALLIN_UPGRADES_LASER if laser else config.ALLIN_UPGRADES) + order
+        if cubes < config.CUBE_UPGRADES_UNTIL:
+            # still growing: more HP and more damage per shot first
+            order = ["plating", "laser_damage" if laser else "gun_damage", "gun_damage"] + order
     for want in order:
         if want in ids:
             return ids.index(want)
@@ -164,7 +167,8 @@ class Memory:
             it["ok"], it["cell"] = ok, cell
         return it["cell"] if it["ok"] else -1
 
-    def best_target(self, me, zone, weapons, late, max_dist, danger, skip=(), phase=None, laser_seek=0.0):
+    def best_target(self, me, zone, weapons, late, max_dist, danger, skip=(), phase=None, laser_seek=0.0,
+                    drone_v=0.0):
         """(id, item) worth going for, or (None, None). `danger(x, y)` -> True to skip.
         POWER: no laser/lightning yet -> those are the top target (up to POWER_R away); early phase -> drones next."""
         x, y = me["pos"][0], me["pos"][1]
@@ -203,6 +207,8 @@ class Memory:
             if POWER:
                 if k == "pickup" and no_special and it["wkind"] in SPECIALS:
                     v, reach = POWER_WEAPON_V, max(max_dist, POWER_R)  # a good weapon first (any phase)
+                elif k == "npc" and drone_v:
+                    v, reach = drone_v, max(max_dist, POWER_R)  # all in: drones are cubes, any phase
                 elif k == "npc" and (phase == "early" or (POWER_MORE and phase == "mid")):
                     v, reach = POWER_DRONE_V, max(max_dist, POWER_R)  # then drones: 2 cubes each, weak shooters
             if laser_seek and k == "pickup" and it["wkind"] == "laser":

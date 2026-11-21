@@ -123,7 +123,8 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         weapons = me["weapons"]
         act: mf.Action = {"tick": obs["tick"]}
         if obs["offer"]:
-            act["pick"] = pick_upgrade(obs["offer"], me["weapons"], SQUAD_ALL_IN and self.situation == "squad")
+            act["pick"] = pick_upgrade(obs["offer"], me["weapons"], SQUAD_ALL_IN and self.situation == "squad",
+                                       me.get("cubes", 0))
 
         # ---- world model
         self.mem.update(obs)
@@ -260,7 +261,8 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
                     skip = ("npc",) if me["hp"] < ALLIN_DRONE_HP * me["max_hp"] else ()
                 tid, _ = self.mem.best_target(me, zone, weapons, late, md, lambda ix, iy: self.danger(ix, iy, t), skip,
                                               phase=self.phase,
-                                              laser_seek=LASER_SEEK_R if (LASER_SEEK and self.all_in) else 0.0)
+                                              laser_seek=LASER_SEEK_R if (LASER_SEEK and self.all_in) else 0.0,
+                                              drone_v=ALLIN_DRONE_V if self.all_in else 0.0)
                 if tid != self.target:
                     self.target, self.target_since = tid, t
             if self.target is not None:

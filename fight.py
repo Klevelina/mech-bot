@@ -245,6 +245,15 @@ class FightMixin:
     def fight_cube(self, me):
         """FIGHT_CUBES: the closest loose cube within reach mid-fight (closer when we're hurt), or None."""
         x, y = me["pos"][0], me["pos"][1]
+        # our own kill's pile first: its cubes + 2 (and its weapons) lie where it died
+        pile, pd = None, KILL_PILE_FIRST_R
+        for key, it in self.mem.items.items():
+            if isinstance(key, tuple) and key[0] == "kill" and key not in self.mem.banned:
+                d = math.hypot(it["x"] - x, it["y"] - y)
+                if d < pd:
+                    pile, pd = (it["x"], it["y"]), d
+        if pile is not None:
+            return pile
         r = FIGHT_CUBES_R * (FIGHT_CUBES_HURT if me["hp"] < 0.5 * me["max_hp"] else 1.0)
         best, bd = None, r
         for it in self.mem.items.values():
