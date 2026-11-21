@@ -29,8 +29,8 @@ class DropsMixin:
                 if dist < 30.0:  # our clock is running (e.g. they stepped out): stay in the ring and finish
                     return self.nav.center(self.nav.nearest_main(px, py)), d["id"], "HOLDRING", None
                 continue
-            if self.late_zone:
-                continue  # late game: keep our HP, no fights over drops
+            if self.late_zone or not CONTEST_OTHERS:
+                continue  # keep our HP, no fights over drops
             rad = d.get("radius", 8.0)
             inside = dist < rad * 0.8
             remaining = d.get("capture_s", 4.0) - d.get("progress", 0.0)

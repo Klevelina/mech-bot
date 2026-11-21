@@ -381,6 +381,41 @@ class FightMixin:
         px, py = self.clamp_safe(pos[0] + r * math.cos(a), pos[1] + r * math.sin(a))
         return self.nav.center(self.nav.nearest_main(px, py))
 
+    def ghost_goal(self, me, m, d, t, t_start):
+        """Where to break contact to, or None to fight on (a lone enemy we'd beat)."""
+        x, y, z = me["pos"]
+        vis = [o for o in self._obs_mechs if o["kind"] == "mech"]
+        between = False
+        for i in range(len(vis)):
+            for j in range(i + 1, len(vis)):
+                a1 = math.atan2(vis[i]["pos"][1] - y, vis[i]["pos"][0] - x)
+                a2 = math.atan2(vis[j]["pos"][1] - y, vis[j]["pos"][0] - x)
+                if abs(wrap(a1 - a2)) > 2.1:  # > 120 deg apart: we're in their crossfire
+                    between = True
+        hittable = self.can_hit(me, m)
+        ttk_them = (m.get("hp") or 1400.0) / self.our_dps(me, m, d, hittable)
+        incoming = sum(self.threat_dps(o, math.hypot(o["pos"][0] - x, o["pos"][1] - y), t) for o in vis)
+        ttk_us = me["hp"] / max(1.0, incoming)
+        losing = ttk_them > GHOST_LOSE * ttk_us
+        if not (len(vis) >= 2 or losing or between):
+            return None
+        eyes = [(o["pos"][0], o["pos"][1], o["pos"][2] + 8.0) for o in vis]
+        c = self.nav.flank_cell(eyes, None, x, y, 45.0, t_start + 0.010)
+        if c >= 0:
+            return self.nav.center(c)
+        if between and len(vis) >= 2:
+            # step out of the line between them: perpendicular to the line joining the two closest
+            a, b = sorted(vis, key=lambda o: math.hypot(o["pos"][0] - x, o["pos"][1] - y))[:2]
+            lx, ly = b["pos"][0] - a["pos"][0], b["pos"][1] - a["pos"][1]
+            ln = math.hypot(lx, ly) or 1.0
+            nx, ny = -ly / ln, lx / ln
+            if (x - a["pos"][0]) * nx + (y - a["pos"][1]) * ny < 0:
+                nx, ny = -nx, -ny
+            px, py = self.clamp_safe(x + 30.0 * nx, y + 30.0 * ny)
+            return self.nav.center(self.nav.nearest_main(px, py))
+        o = min(vis, key=lambda o: math.hypot(o["pos"][0] - x, o["pos"][1] - y))
+        return self.away_goal(me, o["pos"][0], o["pos"][1], 30.0, t_start)
+
     def update_fight_goal(self, me, m, t, t_start):
         """Where to stand against target m, by our loadout. None = keep the normal goal (cover)."""
         if not PLAYSTYLE or self.nav is None or m is None:
@@ -401,6 +436,16 @@ class FightMixin:
             g = self.choose_field(me, t, t_start, self._obs_mechs)
             if g is not None:
                 self.fight_goal, self.fight_mode = g, "FIELD"
+                return
+
+        # ghost: don't trade. Seen by 2+, losing this duel, or standing between two enemies -> out of sight
+        if GHOST and m["kind"] == "mech":
+            g = self.ghost_goal(me, m, d, t, t_start)
+            if g is not None:
+                self.fight_goal, self.fight_mode = g, "GHOST"
+                if t - self.ghost_repick_t > 5.0:
+                    self.ghost_repick_t = t
+                    self.zone_key = None  # re-pick cover away from where they are
                 return
 
         # pick the fight: a lone enemy, nobody else on us, we're healthy -> close to our weapon's range
