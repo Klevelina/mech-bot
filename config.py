@@ -139,7 +139,7 @@ COMBAT_OTHERS_R = 170.0  # other enemies this close count (up to 3)
 COMBAT_DODGE_S = 0.7     # sidestep bullets that would hit us within this many seconds
 # modes that keep their own movement (retreat, finishing, cubes, escapes, drop contests, pursuit out of sight)
 COMBAT_MOVE_SKIP = ("RETREAT", "RUSH", "FIGHTCUBE", "FINISH", "ESCAPE", "CONTEST", "SNIPE", "PURSUE", "DISENGAGE",
-                    "HIDE", "HIDDEN", "VANISH", "drop", "DROPWATCH", "ZONE")  # ZONE: the circle run beats strafing
+                    "HIDE", "HIDDEN", "VANISH", "drop", "DROPWATCH", "ZONE", "HEALDROP")  # ZONE: the circle run beats strafing
 # ---- squad all in, the rest of the plan:
 # fight distance by what we hold (not the playbook bands): lightning (with energy) close, laser long, gun mid;
 # without lightning stay out of an enemy lightning's / mortar's comfort zone; drones at their own distance
@@ -214,6 +214,12 @@ GRAB_LASER_R = 40.0
 CUBE_CAP_WANT = True
 # squad all in: supply drops after all (full HP + 3 cubes), but only safe ones - within SAFE_DROP_R, nobody seen or heard
 # within SAFE_DROP_DANGER_R of it in SAFE_DROP_DANGER_S s; given up as soon as someone shows up there; no contests
+# all in, hurt (below HEAL_DROP_HP) in a fight: go capture the nearest supply drop within HEAL_DROP_R that lands by the
+# time we get there (+ HEAL_DROP_EARLY_S), inside the circle - its full repair comes before cover and before the fight
+HEAL_DROP = True
+HEAL_DROP_HP = 0.95
+HEAL_DROP_R = 250.0
+HEAL_DROP_EARLY_S = 5.0
 SAFE_DROPS = True
 SAFE_DROP_R = 150.0
 SAFE_DROP_DANGER_R = 100.0
