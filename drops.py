@@ -138,6 +138,33 @@ class DropsMixin:
                   "aim": [math.atan2(y - pos[1], x - pos[0]), 0.0]}  # assume it faces us
         return self.fight_odds(me, pseudo, t, at=30.0) >= DROP_WIN_R
 
+    def heal_drop_goal(self, obs, me, t):
+        """HEAL_DROP (all in, hurt, in a fight): the nearest supply drop we can get to - it repairs us in full, so it
+        comes before cover and before the fight. (goal, stop radius) or None."""
+        if not HEAL_DROP or not getattr(self, "all_in", False) or self.nav is None or self.late_zone:
+            return None
+        if me["hp"] >= HEAL_DROP_HP * me["max_hp"]:
+            return None
+        x, y = me["pos"][0], me["pos"][1]
+        walk = me["stats"].get("walk_speed", 11.7)
+        z = obs["zone"]
+        best, bd = None, HEAL_DROP_R
+        for d in obs.get("drops", []):
+            h = d.get("holder")
+            if h is not None and h != me["id"] and d.get("progress", 0) > 0.5 * d.get("capture_s", 4.0):
+                continue  # someone else is most of the way through its capture
+            px, py = d["pos"][0], d["pos"][1]
+            dist = math.hypot(px - x, py - y)
+            if dist >= bd or d.get("lands_in", 0) > dist * 1.3 / walk + HEAL_DROP_EARLY_S:
+                continue
+            if math.hypot(px - z["center"][0], py - z["center"][1]) > z["radius"] - 4.0:
+                continue
+            best, bd = d, dist
+        if best is None:
+            return None
+        c = self.nav.nearest_main(best["pos"][0], best["pos"][1])
+        return self.nav.center(c), best.get("radius", 8.0) * 0.4
+
     def _contest(self, obs, me, t):
         self.contest = self.contest_goal(obs, me, t)
         return self.contest is not None

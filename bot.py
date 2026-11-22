@@ -341,6 +341,12 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             dgoal = math.hypot(vanish_goal[0] - x, vanish_goal[1] - y)
             stop_r = 1.5
             mode = "HIDDEN" if hidden else "VANISH"
+        elif fight_m is not None and self.heal_drop_goal(obs, me, t) is not None:
+            # hurt in a fight with a supply drop in reach: its full repair beats cover and beats the fight
+            g, stop_r = self.heal_drop_goal(obs, me, t)
+            self.set_goal(g, x, y)
+            dgoal = math.hypot(g[0] - x, g[1] - y)
+            mode = "HEALDROP"
         elif contesting:
             g = self.contest[0]
             self.set_goal(g, x, y)
@@ -476,6 +482,8 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             move = [move[0] * VANISH_WALK, move[1] * VANISH_WALK]  # ... and no footsteps (under 5 m/s)
         if mode == "RUSH" and dgoal > 25.0 and me["energy"] > 30:
             boost = True  # finish rush: get there before it gets away / heals
+        if mode == "HEALDROP" and dgoal > 6.0 and me["energy"] > 20:
+            boost = True  # get to the drop's ring and start the capture
         if mode == "ZONE" and dgoal > 6.0 and me["energy"] > 5:
             boost = True  # the circle is coming: run
         if mode == "DISENGAGE" and dgoal > 3.0 and me["energy"] > 30:
