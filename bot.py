@@ -61,6 +61,7 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         self.cur = None         # current fight target id
         self.laser_lost_t = None  # when our charging laser lost its shot (LASER_HOLD_LOST)
         self.laser_full_t = None  # when our laser reached full charge (LASER_RELEASE_ON_AIM)
+        self.resting = self.was_resting = False  # REST_AFTER_KILLS
         self.escape = None      # dict(src=id, goal=(x, y), t=start) while breaking line of sight
         self.escape_check_t = -1e9
         self.target = None      # loot item id
@@ -183,6 +184,23 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
                 mechs = [m for m in mechs if m not in calm]
                 if not mechs and self.threat_t == t and t - self.last_dmg_t > 0.05:
                     self.threat_t = prev_threat_t  # only harmless ones in sight: keep looting
+        if PICK_FIGHTS and self.all_in and t < PICK_FIGHTS_UNTIL and mechs:
+            # mechs not coming for us: only a fight we finish before the next one that is coming for us gets here
+            seen = [m for m in obs["mechs"] if m["kind"] == "mech"]
+            keep = [m for m in mechs if self.fight_allowed(me, m, seen, t)]
+            if len(keep) < len(mechs):
+                mechs = keep
+                if not mechs and self.threat_t == t and t - self.last_dmg_t > 0.05:
+                    self.threat_t = prev_threat_t
+        # after a few kills: with nothing on us, heal up before the next one comes (regen needs 5 s untouched)
+        self.resting = False
+        if REST_AFTER_KILLS and self.all_in and self.our_kills >= REST_AFTER_KILLS:
+            near = min((math.hypot(m["pos"][0] - x, m["pos"][1] - y) for m in obs["mechs"] if m["kind"] == "mech"),
+                       default=1e9)
+            hpf = me["hp"] / max(1.0, me["max_hp"])
+            ok = t - self.last_dmg_t > 1.0 and near > REST_NEAR_R
+            self.resting = ok and hpf < (REST_TO_HP if self.was_resting else REST_BELOW_HP)
+        self.was_resting = self.resting
         if FFA_ENDGAME and self.situation == "ffa" and obs["alive"] <= FFA_END_ALIVE and mechs:
             # let the others fight it out: only those on us, or nearly dead, are targets (the rest stay danger)
             mechs = [m for m in mechs if t - self.attackers.get(m["id"], -1e9) < FFA_END_HIT_S or
@@ -347,6 +365,10 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             self.set_goal(g, x, y)
             dgoal = math.hypot(g[0] - x, g[1] - y)
             mode = "HEALDROP"
+        elif self.resting:
+            # resting between fights: stand still (moving is fine for regen, but loot trips meet the next hunter)
+            self.set_goal((x, y), x, y)
+            dgoal, stop_r, mode = 0.0, 3.0, "REST"
         elif contesting:
             g = self.contest[0]
             self.set_goal(g, x, y)
