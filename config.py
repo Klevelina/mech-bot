@@ -174,6 +174,9 @@ SCAN_MODES = ("cube", "pickup", "crate", "npc", "pile", "cover", "explore")
 ZONE_FIRST = True
 ZONE_PAD = 8.0
 ZONE_SPARE_S = 3.0
+# combat movement at run speed while energy lasts (keeps STRAFE_BOOST_E for retreats, jets and the laser)
+STRAFE_BOOST = True
+STRAFE_BOOST_E = 50.0
 KILL_PILE = True       # (any match) our kill drops its cubes (+2) and weapons where it died: loot target right away
 
 DROP_WAIT_CALM = True  # FREE-FOR-ALL ONLY (vs the squad, 2+ enemies at a drop are hunters coming for us, not a fight):
