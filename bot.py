@@ -61,6 +61,7 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         self.cur = None         # current fight target id
         self.laser_lost_t = None  # when our charging laser lost its shot (LASER_HOLD_LOST)
         self.laser_full_t = None  # when our laser reached full charge (LASER_RELEASE_ON_AIM)
+        self.pre_t = None         # when we started pre-charging at a target behind cover (LASER_PRECHARGE)
         self.escape = None      # dict(src=id, goal=(x, y), t=start) while breaking line of sight
         self.escape_check_t = -1e9
         self.target = None      # loot item id
@@ -636,6 +637,21 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
                 laser_decided = is_mech
                 if LEARN_AIM and is_mech and speed and any(f and w and w["kind"] == "gun" for f, w in zip(fire, weapons)):
                     self.aim.record(t, m, tt)
+                self.pre_t = None
+            elif LASER_PRECHARGE and self.all_in and is_mech and mode not in ("RETREAT", "ZONE", "FIGHTCUBE", "ESCAPE"):
+                # the mech we fight is just behind cover (still tracked): charge the laser now and hold it, aimed where
+                # it should step back out - the full beam goes the moment it shows, before it can shoot first
+                for i, w in enumerate(weapons):
+                    if w and w["kind"] == "laser" and w.get("cooldown", 0) <= 0.05 and \
+                            h < w["stats"].get("range", 280) * 0.9:
+                        if self.pre_t is None:
+                            self.pre_t = t
+                        if t - self.pre_t < LASER_PRE_HOLD_S:
+                            f = list(act.get("fire") or [False, False])
+                            f[i] = True
+                            act["fire"] = f
+                        laser_decided = True  # (past the hold time: let it go, once per time it hides)
+                        break
             # mortar: over cover, at a slow/standing target, or at a bunched pair (gun can't do those well)
             if is_mech and not (self.late_zone and not self.late_fire_ok(me, m, h, t)):
                 gw = next((w for w in weapons if w and w["kind"] == "gun"), None)
@@ -655,6 +671,7 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             mf.draw.line([x, y, z + 7], [e[0], e[1], e[2] + 4.5], "#ff5040")
         else:
             self.cur = None
+            self.pre_t = None
             self.fire_since.clear()
             # nobody visible: lob a shell at an enemy that just ducked behind a building (seen < 2 s ago)
             if MORTAR_USE and self.mortar_slot(weapons) is not None and not self.late_zone:
