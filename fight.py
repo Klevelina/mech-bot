@@ -365,12 +365,22 @@ class FightMixin:
             c = self.nav.walk_cover(weyes, x, y, me["stats"].get("height", 9.0), deadline=t_start + 0.014)
             if c >= 0:
                 return self.nav.center(c)
-        c = self.nav.flank_cell(eyes, None, x, y, ALLIN_COVER_R, t_start + 0.018)
+        nav = self.nav
+        cache = getattr(self, "allin_cover", None)
+        if RETREAT_COVER_CACHE and cache is not None and t - cache[0] < 2.0 and \
+                math.hypot(nav.center(cache[1])[0] - x, nav.center(cache[1])[1] - y) < ALLIN_COVER_R + 10.0:
+            # the spot found a moment ago: keep it while it's still hidden from everyone in sight (a few sight
+            # checks instead of a fresh full search every decision)
+            cx, cy = nav.center(cache[1])
+            if not any(nav.los(ex, ey, ez, cx, cy, nav.surf[cache[1]] + 8.5, skip=1.0) for ex, ey, ez in eyes):
+                return (cx, cy)
+        c = nav.flank_cell(eyes, None, x, y, ALLIN_COVER_R, t_start + ALLIN_COVER_BUDGET)
         if c >= 0:
-            return self.nav.center(c)
-        if ALLIN_CORNERED_FIGHT:
-            return None  # no cover in reach: running across open ground only shows them our back - fight on
-        return self.away_goal(me, m["pos"][0], m["pos"][1], 30.0, t_start)
+            self.allin_cover = (t, c)
+            return nav.center(c)
+        if ALLIN_CORNERED_FIGHT and c == -1:
+            return None  # truly no cover in reach: running across open ground only shows them our back - fight on
+        return self.away_goal(me, m["pos"][0], m["pos"][1], 30.0, t_start)  # (search ran out of time: back off)
 
     def engage_goal(self, me, m, t, d, theirs):
         """ENGAGE (squad): ((x, y), mode) to go at enemy m, or None to leave the position to the other rules.
