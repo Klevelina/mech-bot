@@ -69,7 +69,10 @@ class FightMixin:
                 # the obs rounds to 0.01: an upgraded full charge (0.5625, 0.421875) shows as 0.56 / 0.42 and would
                 # never look full - we'd hold on until the 2 s auto-fire, wherever we aim by then
                 out[i] = dist < st.get("range", 280) and w.get("cooldown", 0) <= 0.05 and charge < full - LASER_FULL_TOL \
-                    and (charge > 0 or (err < tol * 3 and not (PLAYBOOK and getattr(self, "lit_near", False))))
+                    and (charge > 0 or (err < max(tol * 3, LASER_START_ERR) and
+                                        not (PLAYBOOK and getattr(self, "lit_near", False))))
+                # (the torso turns 4 rad/s: a 0.6 rad swing is done in 0.15 s, long before the 0.75 s charge is full -
+                # start charging during the turn; the full-charge release still waits until we're on its body)
                 if LASER_RELEASE_ON_AIM and charge >= full - LASER_FULL_TOL:
                     # full: the beam goes where the torso points when we let go - only let go on its body; keep
                     # holding while the torso is still swinging onto it (up to LASER_FULL_HOLD_S, then it goes anyway)
@@ -373,22 +376,12 @@ class FightMixin:
             c = self.nav.walk_cover(weyes, x, y, me["stats"].get("height", 9.0), deadline=t_start + 0.014)
             if c >= 0:
                 return self.nav.center(c)
-        nav = self.nav
-        cache = getattr(self, "allin_cover", None)
-        if RETREAT_COVER_CACHE and cache is not None and t - cache[0] < 2.0 and \
-                math.hypot(nav.center(cache[1])[0] - x, nav.center(cache[1])[1] - y) < ALLIN_COVER_R + 10.0:
-            # the spot found a moment ago: keep it while it's still hidden from everyone in sight (a few sight
-            # checks instead of a fresh full search every decision)
-            cx, cy = nav.center(cache[1])
-            if not any(nav.los(ex, ey, ez, cx, cy, nav.surf[cache[1]] + 8.5, skip=1.0) for ex, ey, ez in eyes):
-                return (cx, cy)
-        c = nav.flank_cell(eyes, None, x, y, ALLIN_COVER_R, t_start + ALLIN_COVER_BUDGET)
+        c = self.nav.flank_cell(eyes, None, x, y, ALLIN_COVER_R, t_start + 0.018)
         if c >= 0:
-            self.allin_cover = (t, c)
-            return nav.center(c)
-        if ALLIN_CORNERED_FIGHT and c == -1:
-            return None  # truly no cover in reach: running across open ground only shows them our back - fight on
-        return self.away_goal(me, m["pos"][0], m["pos"][1], 30.0, t_start)  # (search ran out of time: back off)
+            return self.nav.center(c)
+        if ALLIN_CORNERED_FIGHT:
+            return None  # no cover in reach: running across open ground only shows them our back - fight on
+        return self.away_goal(me, m["pos"][0], m["pos"][1], 30.0, t_start)
 
     def engage_goal(self, me, m, t, d, theirs):
         """ENGAGE (squad): ((x, y), mode) to go at enemy m, or None to leave the position to the other rules.
