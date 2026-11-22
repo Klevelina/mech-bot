@@ -79,11 +79,11 @@ FOCUS_MAX_D = 240.0    # only targets this close
 # is coming at us, is badly hurt, or is aiming at us with a clear line - no "alone and odds 1.5" requirement.
 # Close to the band; if it ducks out of our line of fire, follow it until we see it again
 ENGAGE = True
-ENGAGE_BAND_MIN = 45.0   # "inside our band": its upper edge, but at least this many m
-ENGAGE_HIT_S = 5.0       # ... or it hit us this recently
-ENGAGE_CLOSING = (3.0, 150.0)  # ... or it comes at us faster than this (m/s) within this (m)
-ENGAGE_WEAK = (0.35, 150.0)    # ... or below this HP fraction within this
-ENGAGE_AIMED_R = 170.0   # ... or its torso points at us with a clear line between us, within this
+ENGAGE_BAND_MIN = 60.0   # "inside our band": its upper edge, but at least this many m
+ENGAGE_HIT_S = 6.0       # ... or it hit us this recently
+ENGAGE_CLOSING = (3.0, 180.0)  # ... or it comes at us faster than this (m/s) within this (m)
+ENGAGE_WEAK = (0.4, 160.0)    # ... or below this HP fraction within this
+ENGAGE_AIMED_R = 190.0   # ... or its torso points at us with a clear line between us, within this
 ENGAGE_MIN_HP = 0.4      # not below this HP fraction (our retreat / hide rules take over)
 # squad: finish rush - an enemy below FINISH_RUSH_HP of its max: get close (FINISH_RUSH_R by our weapon) and finish it,
 # while our HP is above FINISH_RUSH_MIN and at most 2 enemies are in sight within 150 m; boost in from further away
@@ -173,8 +173,8 @@ CUBE_UPGRADES_UNTIL = 10   # below this many cubes: plating and our weapon's dam
 # GEAR_HARM_DMG, no laser within GEAR_LASER_R, further than GEAR_CLOSE_R): they don't stop our looting and aren't
 # targets; weapons count from GEAR_WEAPON_R, lasers from GEAR_LASER_SEEK_R. Anyone else is fought as usual
 GEAR_FIRST = True
-GEAR_UNTIL = 120.0
-GEAR_HARM_DMG = 150.0
+GEAR_UNTIL = 60.0  # was 120: gear-up phase only the first minute
+GEAR_HARM_DMG = 60.0  # was 150: one hit and it's a fight
 GEAR_LASER_R = 170.0
 GEAR_CLOSE_R = 55.0
 GEAR_WEAPON_R = 400.0
