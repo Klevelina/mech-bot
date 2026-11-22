@@ -98,6 +98,7 @@ class CombatMixin:
             if self.cm_rng.random() < 0.6:
                 self.cm_side = -self.cm_side
             self.cm_flip_t = t + 0.3 + 0.7 * self.cm_rng.random()
+        self.cm_boost = False
         d0 = self._cm_dodge(obs, me)
         if d0 is not None:
             return [d0[0], d0[1]], "DODGE"
@@ -119,6 +120,10 @@ class CombatMixin:
                     cube = (it["x"], it["y"], dc)
         # gun only and it can't shoot right now (empty / reloading): step out of the target's line of fire until it can
         want = -1.0 if ducking else 1.0
+        # lightning never misses inside its arc (45 m) and burns 240 HP/s: keep every carrier beyond LIGHTNING_KEEP_R
+        sparks = [(o["pos"][0], o["pos"][1]) for o in obs["mechs"] if o["kind"] == "mech" and
+                  "lightning" in (o.get("weapons") or []) and math.hypot(o["pos"][0] - x, o["pos"][1] - y) < 120.0] \
+            if LIGHTNING_KEEP else []
         best, bmove = -1e18, [0.0, 0.0]
         side_blocked = False
         for k in range(-1, 16):
@@ -161,9 +166,19 @@ class CombatMixin:
                 s -= 8.0
                 if want < 0 and not los:
                     s += 14.0  # already out of its sight while reloading: stay
+            for qx, qy in sparks:
+                dq = math.hypot(qx - cx, qy - cy)
+                if dq < LIGHTNING_KEEP_R:
+                    s -= LIGHTNING_KEEP_W * (1.0 + (LIGHTNING_KEEP_R - dq) / LIGHTNING_KEEP_R)
             if s > best:
                 best, bmove = s, [dx, dy]
         if side_blocked:
             self.cm_side = -self.cm_side
             self.cm_flip_t = t + 0.5
+        # kite on boost: both sides walk equally fast, so only the boost opens the distance to a mech that came close
+        # (under ~60 m everything hits) - or to a lightning carrier inside its reach
+        away = bmove[0] * (x - ex) + bmove[1] * (y - ey) > 0.3 * bd
+        close_spark = any(math.hypot(qx - x, qy - y) < LIGHTNING_KEEP_R for qx, qy in sparks)
+        self.cm_boost = KITE_BOOST and me["energy"] > KITE_BOOST_E and bmove != [0.0, 0.0] and \
+            ((away and bd < KITE_BOOST_R and bd < pref - 10.0) or close_spark)
         return bmove, "STRAFE"
