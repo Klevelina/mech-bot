@@ -372,3 +372,12 @@ LOOT_GIVEUP_S = 15.0   # give up on an item after this long (was 40 s)
 LOOT_CRATE_SHOOT_R = 90.0  # start shooting a visible crate this far away, while still walking (was 60 m)
 LOOT_BOOST = True      # boost-run on loot trips and exploring longer than 15 m ...
 LOOT_BOOST_E = 55.0    # ... while energy is above this (keeps the rest for fights and escapes)
+
+# ---- brain 2 (practice): simpler pilot on top of the world model (brain2.py)
+B2 = True
+B2_HEAL_BELOW = 0.25
+B2_HEAL_TO = 0.6
+B2_HP_W = 0.045
+B2_RANGE_K = 1.0
+B2_FLIP_S = 2.2
+HEAL_DROP_ANY = False
