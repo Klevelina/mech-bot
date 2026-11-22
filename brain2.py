@@ -137,7 +137,7 @@ class Bot2(Bot):
 
         # ---- legs
         laser = kinds.get("laser")
-        keep_out = 30.0 if "lightning" in kinds else 110.0 if laser else 75.0
+        keep_out = 30.0 if "lightning" in kinds else 85.0 if laser else 55.0
         if healing:
             keep_out += 25.0
         mode = "B2"
