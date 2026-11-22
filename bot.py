@@ -728,7 +728,8 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         self.our_kills += k
         if SITUATION and self.situation == "squad":
             dead = self.cfg["match"].get("mechs", 16) - obs["alive"]
-            if dead > self.our_kills and t < SITUATION_UNTIL:
+            # 2+ deaths we didn't cause: one alone can be a drone finishing a house bot we'd shot down
+            if dead - self.our_kills >= SITUATION_MIN_ODD and t < SITUATION_UNTIL:
                 if self.odd_deaths_t is None:
                     self.odd_deaths_t = t
                 elif t - self.odd_deaths_t >= SITUATION_CONFIRM_S:
