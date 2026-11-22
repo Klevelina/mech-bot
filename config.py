@@ -119,7 +119,7 @@ LASER_FULL_HOLD_S = 1.2      # ... or after holding it full this long (it fires 
 ALLIN_COVER_BUDGET = 0.030   # the retreat's cover search may run until this long into the decision (was 0.018:
                              # it timed out in about 2 of 3 retreats, needing ~18 ms typical, up to ~36 ms)
 RETREAT_COVER_CACHE = True   # keep the cover spot found while it stays hidden (no full search every decision)
-DODGE_ALL = True            # all in: sidestep bullets / laser charges in every movement mode, not only while strafing
+DODGE_ALL = False           # all in: sidestep bullets / laser charges in every movement mode, not only while strafing
 GUN_SLEW = True             # gun fires when one tick of torso turning puts the aim on the target's body
 LASER_HOLD_LOST = True    # a charging laser that loses its shot keeps holding (not released into cover) ...
 LASER_HOLD_LOST_S = 1.5    # ... for up to this long
@@ -182,6 +182,7 @@ GEAR_WEAPON_R = 400.0
 GEAR_LASER_SEEK_R = 300.0
 GEAR_STRICT = True     # never harmless: a laser carrier at any distance, or more than GEAR_MAX_CUBES cubes
 GEAR_MAX_CUBES = 3
+GEAR_HUNTERS = True    # never harmless either: closing on us at > 3 m/s within 180 m, or aiming at us within 190 m
 # squad all in: gear sweeps (scan.py) - calm: full torso turn every SCAN_EVERY_NOLASER s without a laser (SCAN_EVERY
 # with one); first sweep / no laser yet and energy >= SCAN_JET_E: jump and jet up during it (down to SCAN_JET_STOP)
 SCAN = False            # (gear-sweep scored 3.85 vs 4.25 without: sweeps from cover / jet scans likely hurt)

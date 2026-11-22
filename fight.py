@@ -311,6 +311,14 @@ class FightMixin:
             return False  # a laser can hurt us from anywhere in sight
         if GEAR_STRICT and (m.get("cubes") or 0) > GEAR_MAX_CUBES:
             return False  # a strong (cube-rich) mech: deal with it
+        if GEAR_HUNTERS:
+            # a hunter on its way in (closing fast) or with its gun on us is about to shoot first: take it on now
+            ex, ey = m["pos"][0], m["pos"][1]
+            closing = (m["vel"][0] * (x - ex) + m["vel"][1] * (y - ey)) / max(d, 1.0)
+            if closing > 3.0 and d < 180.0:
+                return False
+            if d < 190.0 and abs(wrap(m["aim"][0] - math.atan2(y - ey, x - ex))) < 0.25:
+                return False
         dealt = sum(a for _, a in self.dmg_log.get(m["id"], ()))
         return dealt < GEAR_HARM_DMG
 
