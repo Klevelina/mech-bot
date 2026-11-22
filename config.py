@@ -376,7 +376,7 @@ LOOT_BOOST_E = 55.0    # ... while energy is above this (keeps the rest for figh
 # ---- brain 2 (practice): simpler pilot on top of the world model (brain2.py)
 B2 = True
 B2_HEAL_BELOW = 0.25
-B2_HEAL_TO = 0.6
+B2_HEAL_TO = 0.4
 B2_HP_W = 0.045
 B2_RANGE_K = 0.85
 B2_FLIP_S = 2.2
