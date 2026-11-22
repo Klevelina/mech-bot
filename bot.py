@@ -583,6 +583,8 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             speed = 0.0 if (laser_charging or not LEAD or not has_gun) else self._gun_speed(me)
             zoff = self.hit_zoff(me, m)
             k = self.aim.lead(m["id"]) if (LEARN_AIM and is_mech and not (self.all_in and ALLIN_FULL_LEAD)) else 1.0
+            if SQUAD_LEAD_K and is_mech and self.situation == "squad":
+                k = SQUAD_LEAD_K  # house bots strafe and turn back: they cover only part of the straight-line path
             tpos = m["pos"]
             if LASER_LEAD_S and speed == 0.0 and laser_charging:
                 # hitscan, but it fires on our next decision: aim where it will be then
