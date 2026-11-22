@@ -371,15 +371,7 @@ class FightMixin:
                 s -= FOCUS_LOW
             if m["id"] == self.cur:
                 s -= FOCUS_STICK
-            if STRONG_FIRST:
-                if t - self.attackers.get(m["id"], -1e9) < STRONG_HIT_S:
-                    # it's shooting us: first, weighted by how much it has hurt us
-                    s -= STRONG_HIT_BONUS + STRONG_HIT_PER_DMG * sum(a for _, a in self.dmg_log.get(m["id"], ()))
-                if "laser" in (m.get("weapons") or []):
-                    s -= STRONG_LASER_BONUS  # outranges and outdamages us: deal with it early
-                if (m.get("cubes") or 0) > GEAR_MAX_CUBES:
-                    s -= STRONG_CUBES_BONUS  # grows stronger every fight it wins
-            elif t - self.attackers.get(m["id"], -1e9) < 4.0:
+            if t - self.attackers.get(m["id"], -1e9) < 4.0:
                 s -= FOCUS_HITME
             closing = (m["vel"][0] * (x - ex) + m["vel"][1] * (y - ey)) / max(d, 1.0)
             if closing > 3.0:
