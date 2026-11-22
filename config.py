@@ -151,7 +151,7 @@ CUBE_UPGRADES_UNTIL = 10   # below this many cubes: plating and our weapon's dam
 # GEAR_HARM_DMG, no laser within GEAR_LASER_R, further than GEAR_CLOSE_R): they don't stop our looting and aren't
 # targets; weapons count from GEAR_WEAPON_R, lasers from GEAR_LASER_SEEK_R. Anyone else is fought as usual
 GEAR_FIRST = True
-GEAR_UNTIL = 120.0
+GEAR_UNTIL = 180.0      # (120 in the 4.69 build)
 GEAR_HARM_DMG = 150.0
 GEAR_LASER_R = 170.0
 GEAR_CLOSE_R = 55.0
