@@ -143,7 +143,7 @@ COMBAT_MOVE_SKIP = ("RETREAT", "RUSH", "FIGHTCUBE", "FINISH", "ESCAPE", "CONTEST
 # ---- squad all in, the rest of the plan:
 # fight distance by what we hold (not the playbook bands): lightning (with energy) close, laser long, gun mid;
 # without lightning stay out of an enemy lightning's / mortar's comfort zone; drones at their own distance
-ALLIN_RANGE = {"lightning": 28.0, "laser": 120.0, "gun": 85.0, "npc": 58.0}
+ALLIN_RANGE = {"lightning": 28.0, "laser": 140.0, "gun": 85.0, "npc": 58.0}
 ALLIN_RANGE_VS = {"lightning": 64.0, "mortar": 80.0}  # at least this far from these (when we have no lightning)
 ALLIN_SAFE_S = 3.0       # loot again this long after the last threat (SAFE_AFTER otherwise)
 ALLIN_LOOT_R = 150.0     # loot this far in every phase (crates included)
@@ -151,10 +151,10 @@ ALLIN_DRONE_HP = 0.5     # farm drones only above this HP fraction
 ALLIN_NO_DROPS = True    # skip supply drops and drop contests (they pull us into the open for 4 s)
 ALLIN_NO_EXPLORE = True  # no exploring for loot: hold cover / loot what we've seen
 # upgrade picks vs the squad: survival first, then the laser (if we hold one), then the gun
-ALLIN_UPGRADES_LASER = ["plating", "armor", "laser_damage", "laser_charge", "nanites", "gun_damage", "gun_rate",
+ALLIN_UPGRADES_LASER = ["plating", "armor", "nanites", "gun_damage", "gun_rate", "laser_damage", "laser_charge",
                         "lightning_efficiency", "lightning_range", "servos", "gun_mag", "gun_velocity", "gyros"]
-ALLIN_UPGRADES = ["plating", "armor", "gun_damage", "nanites", "gun_rate", "lightning_efficiency", "lightning_range",
-                  "laser_damage", "servos", "laser_charge", "gun_mag", "gun_velocity", "gyros"]
+ALLIN_UPGRADES = ["plating", "armor", "nanites", "gun_damage", "gun_rate", "laser_damage", "laser_charge",
+                  "lightning_efficiency", "lightning_range", "servos", "gun_mag", "gun_velocity", "gyros"]
 # all in: retreat to the hidden spot closest by WALKING distance (out of sight of up to 4 enemies, head and middle)
 RETREAT_WALK = False  # (tested offline: finds fewer hidden spots than flank_cell, not shorter walks)
 ALLIN_FULL_LEAD = True    # all in: always lead the full speed and take long gun shots (no learned lead / holding)
@@ -166,7 +166,7 @@ ALLIN_STRIP = True
 # ---- cubes build (squad all in): cubes are +4% HP and damage each up to 10 - the one thing that snowballs
 KILL_PILE_FIRST_R = 120.0  # mid-fight: our kill's pile (its cubes + 2) within this far comes before anything but retreat
 ALLIN_DRONE_V = 12.0       # a drone (2 cubes, weak shooter) is worth this (POWER_DRONE_V otherwise), any phase
-CUBE_UPGRADES_UNTIL = 10   # below this many cubes: plating and our weapon's damage first
+CUBE_UPGRADES_UNTIL = 0  # (was 10)   # below this many cubes: plating and our weapon's damage first
 # squad all in, gear first: the first GEAR_UNTIL s we don't start fights with "harmless" mechs (dealt us under
 # GEAR_HARM_DMG, no laser within GEAR_LASER_R, further than GEAR_CLOSE_R): they don't stop our looting and aren't
 # targets; weapons count from GEAR_WEAPON_R, lasers from GEAR_LASER_SEEK_R. Anyone else is fought as usual
@@ -212,6 +212,7 @@ FFA_END_WEAK = 0.3
 GRAB_LASER = True
 GRAB_LASER_R = 40.0
 CUBE_CAP_WANT = True
+CUBES_TO_15 = False    # (was on) past the 10-cube stat cap, no more cube detours, not even on the way to 15
 # squad all in: supply drops after all (full HP + 3 cubes), but only safe ones - within SAFE_DROP_R, nobody seen or heard
 # within SAFE_DROP_DANGER_R of it in SAFE_DROP_DANGER_S s; given up as soon as someone shows up there; no contests
 # all in, hurt (below HEAL_DROP_HP) in a fight: go capture the nearest supply drop within HEAL_DROP_R that lands by the
