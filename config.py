@@ -200,9 +200,6 @@ SAFE_DROP_DANGER_S = 10.0
 # late in a practice match: back to our cautious rules (heal to 90%, late hold fire, vanish when surrounded) from this
 # match time - a team measured that staying in squad attack mode late cost them ~0.35 (265 s: next circle <= 70 m)
 ALLIN_UNTIL = 265.0
-# practice: lead house bots by this share of their straight-line travel during the bullet's flight (a team measured
-# 0.8 as best over 123 recorded matches: they strafe and turn back); 0 = off (our usual lead)
-SQUAD_LEAD_K = 0.8
 KILL_PILE = True       # (any match) our kill drops its cubes (+2) and weapons where it died: loot target right away
 
 DROP_WAIT_CALM = True  # FREE-FOR-ALL ONLY (vs the squad, 2+ enemies at a drop are hunters coming for us, not a fight):
