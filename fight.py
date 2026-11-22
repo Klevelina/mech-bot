@@ -245,6 +245,14 @@ class FightMixin:
     def fight_cube(self, me):
         """FIGHT_CUBES: the closest loose cube within reach mid-fight (closer when we're hurt), or None."""
         x, y = me["pos"][0], me["pos"][1]
+        if GRAB_LASER and not any(w and w["kind"] == "laser" for w in me["weapons"]):
+            # no laser yet and one right here: worth more than anything else in this fight
+            from loot import weapon_take
+            for it in self.mem.items.values():
+                if it["kind"] == "pickup" and it.get("wkind") == "laser" and abs(it["z"] - me["pos"][2]) < 3.5 and \
+                        math.hypot(it["x"] - x, it["y"] - y) < GRAB_LASER_R and \
+                        weapon_take("laser", me["weapons"], False, True) is not None:
+                    return (it["x"], it["y"])
         # our own kill's pile first: its cubes + 2 (and its weapons) lie where it died
         pile, pd = None, KILL_PILE_FIRST_R
         for key, it in self.mem.items.items():
@@ -254,6 +262,8 @@ class FightMixin:
                     pile, pd = (it["x"], it["y"]), d
         if pile is not None:
             return pile
+        if CUBE_CAP_WANT and not self.wants_cubes(me):
+            return None
         r = FIGHT_CUBES_R * (FIGHT_CUBES_HURT if me["hp"] < 0.5 * me["max_hp"] else 1.0)
         best, bd = None, r
         for it in self.mem.items.values():
@@ -263,6 +273,12 @@ class FightMixin:
             if d < bd and abs(it["z"] - me["pos"][2]) < 4.0:
                 best, bd = (it["x"], it["y"]), d
         return best
+
+    def wants_cubes(self, me):
+        """Below the 10-cube stat cap, or on the way to the 15-cube upgrade."""
+        c = me.get("cubes", 0)
+        cap = self.cfg["cubes"].get("stat_cap", 10)
+        return c < cap or 13 <= c < 15
 
     def gear_harmless(self, me, m):
         """GEAR_FIRST: m hasn't hurt us much, carries no laser close by and isn't on top of us."""
