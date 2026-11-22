@@ -109,6 +109,10 @@ class DropsMixin:
         """Enemies seen/heard near the drop recently: go anyway if it's one enemy we'd outlast (the capture refills
         our HP, so losing HP doesn't matter as long as we live). Two or more: a brawl, skip."""
         x, y = me["pos"][0], me["pos"][1]
+        if SAFE_DROPS and getattr(self, "all_in", False):
+            # vs the squad: only a drop with nobody seen or heard near it lately - never a fight over one
+            return not any(t - et < SAFE_DROP_DANGER_S and math.hypot(qx - px, qy - py) < SAFE_DROP_DANGER_R
+                           for et, qx, qy in self.enemies.values())
         # watching from close by we see/hear what's there now: only the last 3 s count (a dead brawler drops out)
         win = 3.0 if (self.wait_calm and math.hypot(px - x, py - y) < 70.0) else DROP_DANGER_S
         near = [(k, qx, qy) for k, (et, qx, qy) in self.enemies.items()
@@ -154,6 +158,9 @@ class DropsMixin:
                 self.drop_target = None  # captured (by us or someone else)
             elif self.late_zone and d.get("holder") != me["id"]:
                 self.drop_target = None  # the final small circle started: drop it (unless we're capturing it now)
+            elif SAFE_DROPS and getattr(self, "all_in", False) and                     not self.drop_fight_ok(me, d["pos"][0], d["pos"][1], t):
+                self.drop_banned.add(self.drop_target)  # someone showed up near it: not worth a fight vs the squad
+                self.drop_target = None
             elif (not self.wait_calm and d.get("holder") not in (None, me["id"]) and d.get("progress", 0) > 0.5) \
                     or t - self.drop_since > 75:
                 self.drop_banned.add(self.drop_target)  # someone else is taking it, or it's taking too long
@@ -162,6 +169,8 @@ class DropsMixin:
             self.drop_check_t = t
             hp_frac = me["hp"] / max(1.0, me["max_hp"])
             maxd = DROP_MAX_DIST * (1.3 if hp_frac < 0.5 else 1.0)
+            if SAFE_DROPS and getattr(self, "all_in", False):
+                maxd = SAFE_DROP_R
             best, be = None, 1e18
             for d in drops.values():
                 if d["id"] in self.drop_banned or d.get("holder") not in (None, me["id"]) or self.late_zone:
