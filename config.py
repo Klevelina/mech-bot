@@ -353,7 +353,7 @@ POWER = True
 # LASER_RUN_R is fetched even mid-fight, on boost (LASERRUN); mid-fight grabs reach GRAB_LASER_R
 LASER_PICK_V = 80.0
 LASER_RUN = True
-LASER_RUN_R = 300.0
+LASER_RUN_R = 500.0
 LASER_RUN_CLEAR = 0.0
 LASER_IGNORE_DANGER = True
 LASER_ZONE_LOOSE = True
