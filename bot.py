@@ -59,6 +59,7 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         self.hits = {}          # id -> last time we hit it
         self.fire_since = {}    # id -> when we started shooting at it
         self.cur = None         # current fight target id
+        self.laser_lost_t = None  # when our charging laser lost its shot (LASER_HOLD_LOST)
         self.escape = None      # dict(src=id, goal=(x, y), t=start) while breaking line of sight
         self.escape_check_t = -1e9
         self.target = None      # loot item id
@@ -573,6 +574,7 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
 
         # ---- fight
         no_shot = False
+        laser_decided = False  # the fight code chose the trigger this decision (release on purpose, or keep charging)
         if mechs:
             m = fight_m
             if m["id"] != self.cur:
@@ -590,6 +592,14 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             has_gun = any(w and w["kind"] == "gun" for w in weapons)
             # laser and lightning are instant: no lead without a gun, or while the laser charges
             speed = 0.0 if (laser_charging or not LEAD or not has_gun) else self._gun_speed(me)
+            if LASER_GUN_LEAD and laser_charging and LEAD and has_gun:
+                # charging: the gun keeps firing, so keep its lead (unled bullets miss a strafing mech) until
+                # the last LASER_AIM_SWITCH_S of the charge, then swing onto the beam's straight line
+                lw = next(w for w in weapons if w and w["kind"] == "laser")
+                gw = next(w for w in weapons if w and w["kind"] == "gun")
+                if lw.get("charge", 0) < lw["stats"].get("charge", 0.75) - LASER_AIM_SWITCH_S and \
+                        gw.get("ammo", 0) > 0 and gw.get("reload", 0) <= 0:
+                    speed = self._gun_speed(me)
             zoff = self.hit_zoff(me, m)
             k = self.aim.lead(m["id"]) if (LEARN_AIM and is_mech and not (self.all_in and ALLIN_FULL_LEAD)) else 1.0
             tpos = m["pos"]
@@ -611,8 +621,14 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
                 if mode == "DROPWATCH" and is_mech and t - self.attackers.get(m["id"], -1e9) > 3.0:
                     fire = [False, False]  # waiting out a fight at a drop: don't join it unless shot at
                 if LASER_KILLSHOT and is_mech:
-                    fire = self.laser_killshot(me, m, aim, h, size, fire)
+                    beam = aim
+                    if speed and laser_charging:  # aiming with the gun lead: the beam would go along that line
+                        lpos = [m["pos"][0] + m["vel"][0] * LASER_LEAD_S, m["pos"][1] + m["vel"][1] * LASER_LEAD_S,
+                                m["pos"][2]] if LASER_LEAD_S else m["pos"]
+                        beam, _ = self.aim_at(me, lpos, m["vel"], zoff, 0.0, k)
+                    fire = self.laser_killshot(me, m, beam, h, size, fire)
                 act["fire"] = fire
+                laser_decided = is_mech
                 if LEARN_AIM and is_mech and speed and any(f and w and w["kind"] == "gun" for f, w in zip(fire, weapons)):
                     self.aim.record(t, m, tt)
             # mortar: over cover, at a slow/standing target, or at a bunched pair (gun can't do those well)
@@ -651,6 +667,24 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         # ---- hidden: hold fire (a shot is heard 320 m away); nobody can see us, or we wouldn't be hidden
         if hidden:
             act["fire"] = [False, False]
+
+        # ---- a charging laser without a clear shot this decision (target behind cover, out of sight, or we're
+        # hidden): keep holding the trigger - a missing / false trigger lets the beam go into the wall. Hold for up
+        # to LASER_HOLD_LOST_S, aimed where the target should come back out; then let it go.
+        if LASER_HOLD_LOST:
+            for i, w in enumerate(weapons):
+                if w and w["kind"] == "laser" and w.get("charge", 0) > 0 and not laser_decided:
+                    if self.laser_lost_t is None:
+                        self.laser_lost_t = t
+                    if t - self.laser_lost_t < LASER_HOLD_LOST_S:
+                        f = list(act.get("fire") or [False, False])
+                        f[i] = True
+                        act["fire"] = f
+                    break
+            else:
+                self.laser_lost_t = None
+            if laser_decided:
+                self.laser_lost_t = None
 
         # ---- reload: when calm, during a pause in a fight, or before picking one (never while landing shots)
         g = next((w for w in weapons if w and w["kind"] == "gun"), None)
