@@ -713,6 +713,18 @@ class FightMixin:
             self.fight_goal, self.fight_mode = self.nav.center(self.nav.nearest_main(px, py)), "RUSH"
             return
 
+        if all_in and ALLIN_STREAMLINE:
+            # all in, one short priority list: retreat and finish rush (above), then engage / pursue; otherwise
+            # no fight goal - combat movement (strafe at our range, out of the others' sight) does the rest.
+            # The older rules below (lone-enemy hunt, odds disengage, flank / avoid / hide, playbook bands) are skipped
+            if m["kind"] == "mech":
+                g = self.engage_goal(me, m, t, d, theirs)
+                if g is not None:
+                    self.fight_goal, self.fight_mode = g
+                    return
+            self.fight_goal, self.fight_mode = None, "FIGHTMOVE"
+            return
+
         # pick the fight: a lone enemy, nobody else on us, we're healthy -> close to our weapon's range
         aggro = EARLY_AGGRO and getattr(self, "phase", "") == "early"
         if EARLY_AGGRO:
