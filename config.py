@@ -108,6 +108,10 @@ ALLIN_RECOVER_HI = 0.6
 ALLIN_COVER_R = 45.0     # retreat to a spot within this far that the enemies in sight can't see (else straight away)
 # laser: let go early when what's charged already kills the target (x margin), instead of giving it time to duck away
 LASER_KILLSHOT = True
+LASER_HOLD_LOST = True     # a charging laser that loses its shot keeps holding (not released into cover) ...
+LASER_HOLD_LOST_S = 1.5    # ... for up to this long
+LASER_GUN_LEAD = True     # while the laser charges, aim with the gun's lead (the gun keeps firing) ...
+LASER_AIM_SWITCH_S = 0.2   # ... until this long before full charge, then onto the beam's straight line
 LASER_FULL_TOL = 0.011    # a laser charge within this of full counts as full (the obs rounds to 0.01)
 LASER_KILLSHOT_MARGIN = 0.85
 # squad all in: walk over loose cubes close by during a fight (each is +4% HP and damage at once)
