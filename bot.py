@@ -171,7 +171,7 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         self.aim.observe(t, obs["mechs"])
         self.style = self.loadout_style(weapons)
         self.read_situation(obs, t)
-        self.all_in = SQUAD_ALL_IN and self.situation == "squad"
+        self.all_in = SQUAD_ALL_IN and self.situation == "squad" and t < ALLIN_UNTIL
         self.gearing = GEAR_FIRST and self.all_in and t < GEAR_UNTIL
         if self.gearing and mechs:
             # gear first: mechs that haven't hurt us, carry no laser close by and aren't on top of us are left alone
