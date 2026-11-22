@@ -136,6 +136,14 @@ class CombatMixin:
             if cube is not None:
                 s += 1.5 * (cube[2] - math.hypot(cube[0] - cx, cube[1] - cy))
             s += 9.0 * (dx * sx + dy * sy)
+            if REAR_ARC:
+                # outside the target's front arc our hits do rear damage (x1.5): favour steps that get us there,
+                # or deeper round its side while its torso is still turning
+                off = abs(wrap(math.atan2(cy - ey, cx - ex) - m["aim"][0]))
+                if off > math.pi / 2:
+                    s += REAR_ARC_W
+                elif off > math.pi / 3:
+                    s += REAR_ARC_W * 0.4
             if k < 0:
                 s -= 8.0
             if s > best:
