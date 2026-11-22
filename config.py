@@ -241,6 +241,7 @@ CONTEST = True         # one mech capturing a drop, we reach the ring before it 
 CONTEST_MIN_HP = 0.25  # ... only above this HP fraction (0.5 in the 2.98 build; the fight odds cover the rest)
 CONTEST_MIN_HP_LATE = 0.5  # ... in the late phase (5 or fewer alive, or a small circle): the old floor
 CONTEST_MAX_DIST = 80.0  # ... and only this close (less open ground to cross); sniping has no distance limit
+PARK_TREES = True      # free-for-all: dense tree crowns count as cover when picking where to park (sight only)
 PARK_EXPOSURE = True   # park in corners/alcoves (few open directions) and face the open side
 EXPO_W = 6.0           # m of extra walking we accept per open direction avoided (of 12)
 HUNT = True            # one enemy in sight, nobody else on us, healthy: close to our weapon's range and fight
@@ -304,7 +305,8 @@ PHASE_MID_HEAL = 0.5   # mid, only holding lightning or mortar: heal at a corner
 PHASE_LATE_HEAL = 0.9  # late: heal whenever below this (HP decides the final collapse)
 
 # ---- aim per weapon / watching
-LASER_LEAD_S = 0.1     # laser fires on our next decision: aim where the target will be then
+AIM_LATENCY = 0.075    # gun: our shot leaves about this long after the observation (target and we move on meanwhile)
+LASER_LEAD_S = 0.1    # laser fires on our next decision: aim where the target will be then
 LIGHTNING_CLUSTER = True  # with lightning: prefer targets with other enemies within chain range
 OPEN_WATCH = True      # parked in the open (8+ of 12 directions) with enemies around: sweep the torso wider
 UPGRADE_BY_LOADOUT = True  # upgrade order depends on what we carry (loot.UPGRADES_FOR)
