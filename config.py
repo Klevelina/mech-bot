@@ -194,7 +194,7 @@ CUBE_CAP_WANT = True
 # squad all in: supply drops after all (full HP + 3 cubes), but only safe ones - within SAFE_DROP_R, nobody seen or heard
 # within SAFE_DROP_DANGER_R of it in SAFE_DROP_DANGER_S s; given up as soon as someone shows up there; no contests
 SAFE_DROPS = True
-SAFE_DROP_R = 150.0
+SAFE_DROP_R = 220.0      # (150 in the 4.83 build)
 SAFE_DROP_DANGER_R = 100.0
 SAFE_DROP_DANGER_S = 10.0
 KILL_PILE = True       # (any match) our kill drops its cubes (+2) and weapons where it died: loot target right away
