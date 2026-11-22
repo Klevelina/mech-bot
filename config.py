@@ -353,7 +353,7 @@ POWER = True
 # LASER_RUN_R is fetched even mid-fight, on boost (LASERRUN); mid-fight grabs reach GRAB_LASER_R
 LASER_PICK_V = 80.0
 LASER_RUN = True
-LASER_RUN_R = 500.0
+LASER_RUN_R = 300.0
 LASER_RUN_CLEAR = 0.0
 LASER_IGNORE_DANGER = True
 LASER_ZONE_LOOSE = True
@@ -381,12 +381,3 @@ B2_HP_W = 0.045
 B2_RANGE_K = 1.0
 B2_FLIP_S = 2.2
 HEAL_DROP_ANY = False
-
-# ---- brain 3 (practice): pick fights, fight them at long range (brain3.py)
-B3 = True
-B3_CLOSE_R = 60.0
-B3_COMING_R = 190.0
-B3_AVOID_R = 150.0
-B3_AVOID_W = 8.0
-B3_KITE_R = 90.0
-B3_BAND = (140.0, 190.0)
