@@ -10,13 +10,6 @@ from playbook import band, our_role
 
 
 class FightMixin:
-    def eye_of(self, o):
-        """Eye height of a seen mech: 8 m, grown 5% per cube it carries (SIZE_AWARE)."""
-        if o.get("kind") == "npc":
-            return o["pos"][2] + 3.0
-        sc = 1.0 + self.size_per_cube * (o.get("cubes") or 0) if SIZE_AWARE else 1.0
-        return o["pos"][2] + 8.0 * sc
-
     # ---------- aiming / firing
     def aim_at(self, me, pos, vel, zoff, speed, k=1.0):
         """Aim to hit `pos` (+zoff) moving at `vel`, with a bullet of `speed` (0 = hitscan).
@@ -331,12 +324,12 @@ class FightMixin:
             self.allin_bad_t = t
         if t - getattr(self, "allin_bad_t", -1e9) >= ALLIN_BACK_S:
             return None
-        eyes = [(o["pos"][0], o["pos"][1], self.eye_of(o)) for o in in_sight] or \
-            [(m["pos"][0], m["pos"][1], self.eye_of(m))]
+        eyes = [(o["pos"][0], o["pos"][1], o["pos"][2] + 8.0) for o in in_sight] or \
+            [(m["pos"][0], m["pos"][1], m["pos"][2] + 8.0)]
         if RETREAT_WALK:
             # nearest hidden spot by walking distance, out of sight of up to 4 enemies (head and middle)
             near4 = sorted(in_sight, key=lambda o: math.hypot(o["pos"][0] - x, o["pos"][1] - y))[:4] or [m]
-            weyes = [(o["pos"][0], o["pos"][1], self.eye_of(o)) for o in near4]
+            weyes = [(o["pos"][0], o["pos"][1], o["pos"][2] + 8.0) for o in near4]
             c = self.nav.walk_cover(weyes, x, y, me["stats"].get("height", 9.0), deadline=t_start + 0.014)
             if c >= 0:
                 return self.nav.center(c)
@@ -518,7 +511,7 @@ class FightMixin:
                   math.hypot(o["pos"][0] - ex, o["pos"][1] - ey) > 3.0]
         if AWAY_HIDE_ALL and others:
             # hidden from this one AND every other visible enemy (don't back off into someone else's sights)
-            eyes = [(ex, ey, nav.ground_z(ex, ey) + 8.0)] + [(o["pos"][0], o["pos"][1], self.eye_of(o)) for o in others]
+            eyes = [(ex, ey, nav.ground_z(ex, ey) + 8.0)] + [(o["pos"][0], o["pos"][1], o["pos"][2] + 8.0) for o in others]
             c = nav.flank_cell(eyes, None, x, y, 30.0, t_start + 0.008)
         else:
             c = nav.hide_cell(ex, ey, nav.ground_z(ex, ey) + 8.0, x, y, 30.0, t_start + 0.008)
@@ -783,7 +776,7 @@ class FightMixin:
             lose_r = POWER_BIG_LOSE_R if getattr(self, "big", False) else FIGHT_LOSE_R
             if not quick and self.fight_odds(me, m, t) < lose_r:
                 # only with a hiding spot close by: backing off across open ground just gets us shot longer
-                eyes = [(o["pos"][0], o["pos"][1], self.eye_of(o)) for o in self._obs_mechs if o["kind"] == "mech"]
+                eyes = [(o["pos"][0], o["pos"][1], o["pos"][2] + 8.0) for o in self._obs_mechs if o["kind"] == "mech"]
                 c = self.nav.flank_cell(eyes, None, x, y, DISENGAGE_R, t_start + 0.010)
                 if c >= 0:
                     self.fight_goal = self.nav.center(c)
@@ -799,7 +792,7 @@ class FightMixin:
 
         if WEIGH_THREATS and self.active:
             def eye(o):
-                return (o["pos"][0], o["pos"][1], self.eye_of(o))
+                return (o["pos"][0], o["pos"][1], o["pos"][2] + (3.0 if o["kind"] == "npc" else 8.0))
             under_fire = t - self.last_dmg_t < 3.0
             # low HP under fire: get out of everyone's sight and regenerate
             # ... unless the target dies in ~2 s: finish it instead

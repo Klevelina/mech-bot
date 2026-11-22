@@ -26,7 +26,7 @@ class StealthMixin:
         for m in obs_mechs:
             if m["kind"] == "mech":
                 ids.add(m["id"])
-                out.append((m["id"], m["pos"][0], m["pos"][1], self.eye_of(m)))
+                out.append((m["id"], m["pos"][0], m["pos"][1], m["pos"][2] + 8.0))
         for i, (et, pos, _) in self.epos.items():
             if i < 100 and i not in ids and t - et < 8.0:
                 out.append((i, pos[0], pos[1], pos[2] + 8.0))

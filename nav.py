@@ -30,8 +30,6 @@ def _log(*a):
 class Nav:
     def __init__(self, map_dir: str, mech: dict, cell: float = 2.0):
         t0 = time.perf_counter()
-        self.body_top = 8.5   # height above the ground a hiding spot must hide (the bot updates it as we grow)
-        self.muzzle_z = 7.0   # our gun height, for spots that must keep a line of fire
         with open(os.path.join(map_dir, "v2", "world.json"), encoding="utf-8") as f:
             world = json.load(f)
         ter = world["terrain"]
@@ -352,7 +350,7 @@ class Nav:
                             cand.append(c)
             for n_c, c in enumerate(cand[::2] if r > 6 else cand):
                 cx, cy = self.center(c)
-                if not self.los(ex, ey, ez, cx, cy, surf[c] + self.body_top, skip=1.0):
+                if not self.los(ex, ey, ez, cx, cy, surf[c] + 8.5, skip=1.0):
                     return c
                 if deadline is not None and n_c & 15 == 15 and time.perf_counter() > deadline:
                     return -1
@@ -383,10 +381,10 @@ class Nav:
                 if deadline is not None and n_c & 7 == 0 and time.perf_counter() > deadline:
                     return -1
                 cx, cy = self.center(c)
-                top = surf[c] + self.body_top
+                top = surf[c] + 8.5
                 if any(self.los(ex, ey, ez, cx, cy, top, skip=1.0) for ex, ey, ez in hide_from):
                     continue
-                if shoot_at is not None and not self.los(cx, cy, surf[c] + self.muzzle_z, *shoot_at):
+                if shoot_at is not None and not self.los(cx, cy, surf[c] + 7.0, *shoot_at):
                     continue
                 return c
         return -1

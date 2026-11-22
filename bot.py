@@ -119,10 +119,6 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         t_start = time.perf_counter()
         me = obs["self"]
         x, y, z = me["pos"]
-        if SIZE_AWARE and self.nav is not None:
-            sc = 1.0 + self.size_per_cube * me.get("cubes", 0)
-            self.nav.body_top = 9.0 * sc - 0.5
-            self.nav.muzzle_z = me["stats"].get("muzzle_height", 7.0 * sc)
         t = obs["t"]
         zone = obs["zone"]
         weapons = me["weapons"]
@@ -524,6 +520,13 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             yaw = math.atan2(zone["center"][1] - y, zone["center"][0] - x)
             if SWEEP and not fighting:
                 yaw += 1.0 * math.sin(t * 0.5)
+        lf = getattr(self, "last_fought", None)
+        if WATCH_LAST and not mechs and lf in self.epos and t - self.epos[lf][0] < WATCH_LAST_S:
+            # the mech we were fighting just went out of sight: keep our front (and gun) on where it should be,
+            # not on our walking direction - else it steps back out onto our back (rear hits x1.5)
+            lt, lp, lv = self.epos[lf]
+            dt = min(t - lt, 1.0)
+            yaw = math.atan2(lp[1] + lv[1] * dt - y, lp[0] + lv[0] * dt - x)
         if OPENING_SCAN and t < 3.0 and not mechs:
             # first 3 s: one full turn of the torso to spot loot and the first hunter
             if self.spawn_yaw is None:
@@ -574,6 +577,8 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             m = fight_m
             if m["id"] != self.cur:
                 self.cur = m["id"]
+            if m["kind"] == "mech":
+                self.last_fought = m["id"]
             for i in list(self.fire_since):
                 if i != m["id"]:
                     del self.fire_since[i]

@@ -129,7 +129,7 @@ class CombatMixin:
             if nav.los(cx, cy, cz + mh, ex, ey, tz):
                 s += 45.0
             for o in others:
-                if nav.los(o["pos"][0], o["pos"][1], self.eye_of(o), cx, cy, cz + 0.55 * (nav.body_top + 0.5)):
+                if nav.los(o["pos"][0], o["pos"][1], o["pos"][2] + 8.0, cx, cy, cz + 5.0):
                     s -= 30.0
             if not nav.in_safe(c):
                 s -= 40.0

@@ -11,6 +11,8 @@ DANGER_S = 25.0        # ... "recently"
 ENERGY_RESERVE = 25.0  # lightning won't spend below this (kept for boost/jet escapes)
 ENERGY_RESERVE_LATE = 9.0  # late game: spend almost all of it
 SWEEP = True           # sweep the torso while walking to spot more loot
+WATCH_LAST = True      # the mech we fought went out of sight: keep facing where it should be for WATCH_LAST_S
+WATCH_LAST_S = 4.0
 FACE_ATTACKER = True   # turn toward where damage comes from when we can't see the shooter
 LEAD = True            # lead gun shots at mechs
 SMART_TARGET = True    # attacker > low HP > back turned > close; else nearest
@@ -103,9 +105,6 @@ ALLIN_BACK_S = 1.5
 ALLIN_COVER_R = 45.0     # retreat to a spot within this far that the enemies in sight can't see (else straight away)
 # laser: let go early when what's charged already kills the target (x margin), instead of giving it time to duck away
 LASER_KILLSHOT = True
-# cubes make every mech 5% bigger each (no cap): hiding spots must hide OUR real height (13.5 m at 10 cubes) from
-# the enemies' real eye heights (8 m x the same scale), not a fixed 8.5 m / 8 m
-SIZE_AWARE = True
 LASER_FULL_TOL = 0.011    # a laser charge within this of full counts as full (the obs rounds to 0.01)
 LASER_KILLSHOT_MARGIN = 0.85
 # squad all in: walk over loose cubes close by during a fight (each is +4% HP and damage at once)
