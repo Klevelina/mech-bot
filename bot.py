@@ -141,6 +141,8 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             self.threat_t = t
         for e in obs["events"]:
             if e["type"] == "damaged" and e.get("by") is not None and e["by"] < 100:
+                if e.get("rear"):
+                    self.rear_hit = (t, e["by"])
                 self.threat_t = t
                 self.attackers[e["by"]] = t
                 if e.get("weapon") == "laser":
@@ -178,6 +180,10 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
                 mechs = [m for m in mechs if m not in calm]
                 if not mechs and self.threat_t == t and t - self.last_dmg_t > 0.05:
                     self.threat_t = prev_threat_t  # only harmless ones in sight: keep looting
+        if FFA_ENDGAME and self.situation == "ffa" and obs["alive"] <= FFA_END_ALIVE and mechs:
+            # let the others fight it out: only those on us, or nearly dead, are targets (the rest stay danger)
+            mechs = [m for m in mechs if t - self.attackers.get(m["id"], -1e9) < FFA_END_HIT_S or
+                     (m.get("hp") and m.get("max_hp") and m["hp"] < FFA_END_WEAK * m["max_hp"])]
         if KILL_PILE:
             for e in obs["events"]:
                 if e["type"] == "kill" and e.get("target") in self.epos:
@@ -300,6 +306,12 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         finishing = FINISH and not (self.all_in and ALLIN_STRIP) and self.nav is not None and self.escape is None and not contesting and             self._finish(me, mechs, t)
         if finishing and self.finish_m is not None:
             fight_m = self.finish_m  # the fleeing low-HP one is the target
+        rh = getattr(self, "rear_hit", None)
+        if DEFEND_REAR and self.all_in and rh is not None and t - rh[0] < DEFEND_REAR_S and \
+                (fight_m is None or fight_m["id"] != rh[1]):
+            shooter = next((m for m in mechs if m["id"] == rh[1]), None)
+            if shooter is not None:
+                fight_m = shooter  # it's hitting our back: face it (front armor) and fight it
         if fight_m is not None and self.escape is None:
             self.update_fight_goal(me, fight_m, t, t_start)
         elif not mechs:
