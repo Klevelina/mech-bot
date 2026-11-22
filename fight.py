@@ -384,13 +384,15 @@ class FightMixin:
             if d > FOCUS_MAX_D or not self.can_hit(me, m):
                 continue
             hp = m.get("hp") or 1400.0
-            s = d + FOCUS_HP_W * hp
-            if m.get("max_hp") and hp <= 0.3 * m["max_hp"]:
+            # FOCUS_NEAR: nearest and whoever is hitting us first; HP only breaks ties, and a nearly dead mech
+            # is only worth a detour when it's close (chasing weak ones far away walks us into the squad)
+            s = d + (FOCUS_NEAR_HP_W if FOCUS_NEAR else FOCUS_HP_W) * hp
+            if m.get("max_hp") and hp <= 0.3 * m["max_hp"] and (not FOCUS_NEAR or d < FOCUS_NEAR_LOW_R):
                 s -= FOCUS_LOW
             if m["id"] == self.cur:
                 s -= FOCUS_STICK
             if t - self.attackers.get(m["id"], -1e9) < 4.0:
-                s -= FOCUS_HITME
+                s -= FOCUS_NEAR_HITME if FOCUS_NEAR else FOCUS_HITME
             closing = (m["vel"][0] * (x - ex) + m["vel"][1] * (y - ey)) / max(d, 1.0)
             if closing > 3.0:
                 s -= FOCUS_CLOSING
