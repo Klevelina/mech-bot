@@ -45,7 +45,8 @@ DROP_WIN_R = 1.1       # fight odds (seconds until we die / seconds to kill it) 
 # a free-for-all against other teams' bots. Deaths we didn't cause (before the zone gets deadly) mean free-for-all.
 SITUATION = True
 SITUATION_UNTIL = 300.0   # only count deaths before this match time (later the zone kills too)
-SITUATION_MIN_ODD = 2      # this many deaths we didn't cause before deciding it's a free-for-all (was 1)
+PROBE_STOP_T = 150.0       # PROBE BUILD ONLY: stop shooting mechs at this match time (0 = off). Never keep.
+SITUATION_MIN_ODD = 2     # this many deaths we didn't cause before deciding it's a free-for-all (was 1)
 SITUATION_CONFIRM_S = 1.0  # the extra deaths must stay unexplained this long (a kill event may arrive a tick late)
 # squad only: heal at cover between hunters (more come after each kill): (start below, heal up to) per phase;
 # no hunting while healing. None = use the phase rules (PHASES)
