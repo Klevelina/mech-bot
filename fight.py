@@ -264,6 +264,13 @@ class FightMixin:
                 best, bd = (it["x"], it["y"]), d
         return best
 
+    def hold_fire_on(self, me, m, t):
+        """NO_FIRST (we have no laser): don't start a fight with m."""
+        if t - self.attackers.get(m["id"], -1e9) < NO_FIRST_HUNT_S:
+            return False  # it's on us: fight back
+        d = math.hypot(m["pos"][0] - me["pos"][0], m["pos"][1] - me["pos"][1])
+        return "laser" in (m.get("weapons") or []) or d > NO_FIRST_CLOSE_R
+
     def gear_harmless(self, me, m):
         """GEAR_FIRST: m hasn't hurt us much, carries no laser close by and isn't on top of us."""
         x, y = me["pos"][0], me["pos"][1]

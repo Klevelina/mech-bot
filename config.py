@@ -169,6 +169,11 @@ SCAN_JET_STOP = 35.0
 SCAN_MECH_R = 150.0      # calm = no enemy that matters this close (harmless ones don't count while gearing) ...
 SCAN_ANY_R = 50.0        # ... and no enemy at all this close
 SCAN_MODES = ("cube", "pickup", "crate", "npc", "pile", "cover", "explore")
+# squad all in, no first shot while we have no laser: fight only mechs that hit us in the last NO_FIRST_HUNT_S s or
+# are within NO_FIRST_CLOSE_R m - and never start one with a laser carrier
+NO_FIRST = True
+NO_FIRST_HUNT_S = 6.0
+NO_FIRST_CLOSE_R = 55.0
 KILL_PILE = True       # (any match) our kill drops its cubes (+2) and weapons where it died: loot target right away
 
 DROP_WAIT_CALM = True  # FREE-FOR-ALL ONLY (vs the squad, 2+ enemies at a drop are hunters coming for us, not a fight):
