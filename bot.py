@@ -362,7 +362,7 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             dgoal = math.hypot(self.fight_goal[0] - x, self.fight_goal[1] - y)
             stop_r = 3.0
             mode = self.fight_mode
-        elif DROPS and not (self.all_in and ALLIN_NO_DROPS) and self.nav is not None and (t - self.threat_t > 3.0 or (
+        elif DROPS and not (self.all_in and ALLIN_NO_DROPS and not SAFE_DROPS) and self.nav is not None and (t - self.threat_t > 3.0 or (
                 self.wait_calm and self.drop_target is not None and t - self.last_dmg_t > 3.0)) and \
                 self._drop(obs, me, t):
             # (already going for a drop: enemies in sight don't stop it, only being hit does)
