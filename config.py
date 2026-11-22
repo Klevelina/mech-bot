@@ -169,6 +169,14 @@ SCAN_JET_STOP = 35.0
 SCAN_MECH_R = 150.0      # calm = no enemy that matters this close (harmless ones don't count while gearing) ...
 SCAN_ANY_R = 50.0        # ... and no enemy at all this close
 SCAN_MODES = ("cube", "pickup", "crate", "npc", "pile", "cover", "explore")
+# squad focus fire, strong first: attackers like the Rust bot weights them (-100, -0.1 per damage point dealt us, last
+# 5 s; was -40), laser carriers -60, mechs with more than GEAR_MAX_CUBES cubes -40
+STRONG_FIRST = True
+STRONG_HIT_S = 5.0
+STRONG_HIT_BONUS = 100.0
+STRONG_HIT_PER_DMG = 0.1
+STRONG_LASER_BONUS = 60.0
+STRONG_CUBES_BONUS = 40.0
 KILL_PILE = True       # (any match) our kill drops its cubes (+2) and weapons where it died: loot target right away
 
 DROP_WAIT_CALM = True  # FREE-FOR-ALL ONLY (vs the squad, 2+ enemies at a drop are hunters coming for us, not a fight):
