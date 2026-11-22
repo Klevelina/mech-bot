@@ -77,9 +77,18 @@ class CombatMixin:
         n = math.hypot(dx, dy)
         return (dx / n, dy / n) if n > 0.01 else None
 
+    def reload_ducking(self, me):
+        """RELOAD_DUCK: gun only, and it can't shoot right now (empty / reloading)."""
+        if not RELOAD_DUCK or any(w and w["kind"] in ("laser", "lightning") for w in me["weapons"]):
+            return False
+        gw = next((w for w in me["weapons"] if w and w["kind"] == "gun"), None)
+        return gw is not None and (gw.get("ammo", 0) <= 0 or gw.get("reload", 0) > 0.25)
+
     def combat_move(self, obs, me, m, t, t_start):
-        """([mx, my], mode) or None (target not in our line of fire: leave movement to the fight goal)."""
-        if self.nav is None or m["kind"] != "mech" or not self.can_hit(me, m):
+        """([mx, my], mode) or None (target not in our line of fire: leave movement to the fight goal).
+        While reloading (gun only) it also runs out of the line of fire, to keep us hidden until the gun is ready."""
+        ducking = self.reload_ducking(me)
+        if self.nav is None or m["kind"] != "mech" or not (ducking or self.can_hit(me, m)):
             return None
         if self.cm_rng is None:
             self.cm_rng = random.Random(self.cfg.get("match", {}).get("seed", 0) or 7)
@@ -108,6 +117,8 @@ class CombatMixin:
                 dc = math.hypot(it["x"] - x, it["y"] - y)
                 if dc < 40.0 and (cube is None or dc < cube[2]):
                     cube = (it["x"], it["y"], dc)
+        # gun only and it can't shoot right now (empty / reloading): step out of the target's line of fire until it can
+        want = -1.0 if ducking else 1.0
         best, bmove = -1e18, [0.0, 0.0]
         side_blocked = False
         for k in range(-1, 16):
@@ -126,8 +137,9 @@ class CombatMixin:
             cz = nav.surf[c]
             d = math.hypot(ex - cx, ey - cy)
             s = -1.1 * abs(d - pref) - 0.4 * r
-            if nav.los(cx, cy, cz + mh, ex, ey, tz):
-                s += 45.0
+            los = nav.los(cx, cy, cz + mh, ex, ey, tz)
+            if los:
+                s += 45.0 * want
             for o in others:
                 if nav.los(o["pos"][0], o["pos"][1], o["pos"][2] + 8.0, cx, cy, cz + 5.0):
                     s -= 30.0
@@ -135,7 +147,8 @@ class CombatMixin:
                 s -= 40.0
             if cube is not None:
                 s += 1.5 * (cube[2] - math.hypot(cube[0] - cx, cube[1] - cy))
-            s += 9.0 * (dx * sx + dy * sy)
+            if want > 0:
+                s += 9.0 * (dx * sx + dy * sy)
             if REAR_ARC:
                 # outside the target's front arc our hits do rear damage (x1.5): favour steps that get us there,
                 # or deeper round its side while its torso is still turning
@@ -146,6 +159,8 @@ class CombatMixin:
                     s += REAR_ARC_W * 0.4
             if k < 0:
                 s -= 8.0
+                if want < 0 and not los:
+                    s += 14.0  # already out of its sight while reloading: stay
             if s > best:
                 best, bmove = s, [dx, dy]
         if side_blocked:

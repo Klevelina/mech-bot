@@ -331,6 +331,10 @@ class FightMixin:
                 bad = True
         if bad:
             self.allin_bad_t = t
+        if ALLIN_FINISH_OVERRIDE and m.get("hp") is not None:
+            # it dies to one more burst (under 200 HP, or under half of ours, and close): never back off from that
+            if math.hypot(m["pos"][0] - x, m["pos"][1] - y) < 120.0 and (m["hp"] < 200.0 or m["hp"] < 0.5 * me["hp"]):
+                return None
         if t - getattr(self, "allin_bad_t", -1e9) >= ALLIN_BACK_S:
             return None
         eyes = [(o["pos"][0], o["pos"][1], o["pos"][2] + 8.0) for o in in_sight] or \
@@ -345,6 +349,8 @@ class FightMixin:
         c = self.nav.flank_cell(eyes, None, x, y, ALLIN_COVER_R, t_start + 0.018)
         if c >= 0:
             return self.nav.center(c)
+        if ALLIN_CORNERED_FIGHT:
+            return None  # no cover in reach: running across open ground only shows them our back - fight on
         return self.away_goal(me, m["pos"][0], m["pos"][1], 30.0, t_start)
 
     def engage_goal(self, me, m, t, d, theirs):

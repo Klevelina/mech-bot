@@ -103,9 +103,12 @@ ALLIN_THREE_HP = 0.8
 ALLIN_LOW_HP = 0.35      # ... with the target at least 10 points of HP fraction above us
 ALLIN_TARGET_LOW = 0.25  # never retreat from a target below this (and us above 20%, at most 2 near)
 ALLIN_BACK_S = 1.5
-RETREAT_BOOST = True      # the all-in retreat boosts to its cover spot ...
+ALLIN_FINISH_OVERRIDE = True  # never retreat from a target within 120 m under 200 HP or under half our HP
+ALLIN_CORNERED_FIGHT = True   # no cover within reach of the retreat: keep fighting instead of running into the open
+RELOAD_DUCK = True            # gun only, reloading / empty: combat movement steps out of the target's line of fire
+RETREAT_BOOST = True     # the all-in retreat boosts to its cover spot ...
 RETREAT_BOOST_E = 10.0    # ... with more energy than this
-ALLIN_RECOVER = True      # below RECOVER_LO HP: retreat to cover and stay until RECOVER_HI (a 5.85 bot's last gain)
+ALLIN_RECOVER = True      # below RECOVER_LO HP: retreat to cover and stay until RECOVER_HI (regen needs 5 s untouched)
 ALLIN_RECOVER_LO = 0.25
 ALLIN_RECOVER_HI = 0.6
 ALLIN_COVER_R = 45.0     # retreat to a spot within this far that the enemies in sight can't see (else straight away)
@@ -121,7 +124,7 @@ LASER_KILLSHOT_MARGIN = 0.85
 FIGHT_CUBES = True
 FIGHT_CUBES_R = 70.0     # this close (55 until the cubes build)
 FIGHT_CUBES_HURT = 0.57  # x this below half HP (40 m)
-# squad all in: a laser we'd take is worth a long walk (gun + laser is the leaderboard loadout), any phase
+# squad all in: a laser we'd take is worth a long walk (gun + laser is the strongest pair), any phase
 LASER_SEEK = True
 LASER_SEEK_R = 240.0
 # squad all in: combat movement (combat.py) - with the target in our line of fire, every decision pick the best of
