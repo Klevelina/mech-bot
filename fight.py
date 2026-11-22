@@ -302,7 +302,7 @@ class FightMixin:
         """Below the 10-cube stat cap, or on the way to the 15-cube upgrade."""
         c = me.get("cubes", 0)
         cap = self.cfg["cubes"].get("stat_cap", 10)
-        return c < cap or 13 <= c < 15
+        return c < cap or (CUBES_TO_15 and 13 <= c < 15)
 
     def gear_harmless(self, me, m):
         """GEAR_FIRST: m hasn't hurt us much, carries no laser close by and isn't on top of us."""

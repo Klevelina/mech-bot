@@ -1,7 +1,7 @@
 """Loot: remember items we have seen, pick what to go for, weapon swap rules, upgrade picks."""
 import math
 
-from config import CUBE_CAP_WANT, LASER_FIRST, LIGHTNING_FIRST, PLAYBOOK, DROP_GUN_FOR_PAIR, MORTAR_USE, UPGRADE_BY_LOADOUT, \
+from config import CUBES_TO_15, CUBE_CAP_WANT, LASER_FIRST, LIGHTNING_FIRST, PLAYBOOK, DROP_GUN_FOR_PAIR, MORTAR_USE, UPGRADE_BY_LOADOUT, \
     POWER, POWER_WEAPON_V, POWER_DRONE_V, POWER_R, POWER_MORE, POWER_CRATE_V
 
 # What a found item is worth before distance (rough "cubes" scale).
@@ -201,7 +201,7 @@ class Memory:
                         v = max(v, 6.0)  # first special of any kind: both are a big step up from the gun
             else:
                 v = VALUE[k]
-                if k == "cube" and CUBE_CAP_WANT and not (me.get("cubes", 0) < 10 or 13 <= me.get("cubes", 0) < 15):
+                if k == "cube" and CUBE_CAP_WANT and not (me.get("cubes", 0) < 10 or (CUBES_TO_15 and 13 <= me.get("cubes", 0) < 15)):
                     v = 1.0  # stat bonus capped: a cube is only worth picking up on the way
                 if POWER_MORE and k == "crate":
                     v = POWER_CRATE_V  # a cube plus a 50% chance of a weapon
