@@ -686,11 +686,6 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             if laser_decided:
                 self.laser_lost_t = None
 
-        # ---- PROBE (measurement build only, never to keep): no shots at mechs / drones from PROBE_STOP_T on, so
-        # the practice score = our kills before that time
-        if PROBE_STOP_T and t >= PROBE_STOP_T and mechs:
-            act["fire"] = [False, False]
-
         # ---- reload: when calm, during a pause in a fight, or before picking one (never while landing shots)
         g = next((w for w in weapons if w and w["kind"] == "gun"), None)
         if g and g.get("reload", 0) == 0:
