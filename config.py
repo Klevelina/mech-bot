@@ -114,7 +114,11 @@ ALLIN_RECOVER_HI = 0.6
 ALLIN_COVER_R = 45.0     # retreat to a spot within this far that the enemies in sight can't see (else straight away)
 # laser: let go early when what's charged already kills the target (x margin), instead of giving it time to duck away
 LASER_KILLSHOT = True
-LASER_START_ERR = 0.6        # start a laser charge once the torso is within this (rad) of the aim (was ~3 body widths)
+WAIT_FOR_HUNTER = True           # all in, with a laser: a hunter (walked at us / hit us in 8 s) out of sight -> hold, don't pursue
+WAIT_HUNTER_HP = 0.35        # ... unless it's below this HP fraction (then chase the kill)
+LASER_PRECHARGE = True      # all in: charge the laser while the target is behind cover (tracked) and hold it ...
+LASER_PRE_HOLD_S = 2.4       # ... this long from the start of the charge (it fires on its own at charge + 2 s)
+LASER_START_ERR = 0.6       # start a laser charge once the torso is within this (rad) of the aim (was ~3 body widths)
 LASER_RELEASE_ON_AIM = True # a full laser is let go only with the torso on the target's body ...
 LASER_FULL_HOLD_S = 1.2      # ... or after holding it full this long (it fires on its own after 2 s)
 GUN_SLEW = True              # gun fires when one tick of torso turning puts the aim on the target's body
