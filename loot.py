@@ -54,9 +54,6 @@ def pick_upgrade(offer, weapons=None, all_in=False, cubes=0):
         if cubes < config.CUBE_UPGRADES_UNTIL:
             # still growing: more HP and more damage per shot first
             order = ["plating", "laser_damage" if laser else "gun_damage", "gun_damage"] + order
-        if config.NANITES_EARLY:
-            # all in we never stop to heal: faster out-of-fight regen (+60%, 1.5 s sooner) heals us between hunters
-            order = ["plating", "nanites"] + [u for u in order if u not in ("plating", "nanites")]
     for want in order:
         if want in ids:
             return ids.index(want)
