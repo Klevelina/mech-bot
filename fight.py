@@ -320,6 +320,15 @@ class FightMixin:
             bad = True
         if tf < ALLIN_TARGET_LOW and hp_frac > 0.2 and n <= 2:
             bad = False  # it's nearly dead: finish it
+        if ALLIN_RECOVER:
+            # badly hurt: stay in cover until regen has us back up (regen needs 5 s with no damage dealt or taken),
+            # instead of short pulses that send us back out at 25% - unless a lone target is nearly dead too
+            if hp_frac < ALLIN_RECOVER_LO:
+                self.allin_recovering = True
+            elif hp_frac >= ALLIN_RECOVER_HI:
+                self.allin_recovering = False
+            if getattr(self, "allin_recovering", False) and not (tf < ALLIN_TARGET_LOW and n <= 1 and hp_frac > 0.15):
+                bad = True
         if bad:
             self.allin_bad_t = t
         if t - getattr(self, "allin_bad_t", -1e9) >= ALLIN_BACK_S:
