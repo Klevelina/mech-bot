@@ -157,7 +157,7 @@ class Bot3(Bot2):
             mode = "B3FIGHT"
         elif goal is None and tgt is not None:
             goal, mode = (tgt["pos"][0], tgt["pos"][1]), "B3NPC"
-        if goal is None and fight_dir is None and nearest > 80 and \
+        if goal is None and fight_dir is None and (nearest > 80 or not laser) and \
                 (len(kinds) < 2 or (t < 45.0 and me.get("cubes", 0) < 3)):
             goal, mode = tuple(zone["next_center"]), "B3EXPLORE"
         if fight_dir is not None:
