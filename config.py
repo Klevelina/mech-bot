@@ -72,6 +72,10 @@ FOCUS_STICK = 120.0    # ... minus this for our current target
 FOCUS_HITME = 40.0     # ... minus this if it hit us in the last 4 s
 FOCUS_CLOSING = 15.0   # ... minus this if it's coming at us faster than 3 m/s
 FOCUS_MAX_D = 240.0    # only targets this close
+FOCUS_NEAR = True        # target the nearest / whoever hits us, not the weakest (weakest-first cost a 5.8 bot 0.6)
+FOCUS_NEAR_HP_W = 0.03   # ... m per HP point, a tiebreak (1400 HP = 42 m)
+FOCUS_NEAR_LOW_R = 80.0  # ... the below-30%-HP bonus only this close
+FOCUS_NEAR_HITME = 80.0  # ... minus this if it hit us in the last 4 s
 # squad: engage and pursue - go after an enemy that's inside our matchup's distance band (playbook), recently hit us,
 # is coming at us, is badly hurt, or is aiming at us with a clear line - no "alone and odds 1.5" requirement.
 # Close to the band; if it ducks out of our line of fire, follow it until we see it again
