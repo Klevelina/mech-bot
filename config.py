@@ -116,7 +116,11 @@ ALLIN_COVER_R = 45.0     # retreat to a spot within this far that the enemies in
 LASER_KILLSHOT = True
 LASER_RELEASE_ON_AIM = True  # a full laser is let go only with the torso on the target's body ...
 LASER_FULL_HOLD_S = 1.2      # ... or after holding it full this long (it fires on its own after 2 s)
-GUN_SLEW = True              # gun fires when one tick of torso turning puts the aim on the target's body
+ALLIN_COVER_BUDGET = 0.030   # the retreat's cover search may run until this long into the decision (was 0.018:
+                             # it timed out in about 2 of 3 retreats, needing ~18 ms typical, up to ~36 ms)
+RETREAT_COVER_CACHE = True   # keep the cover spot found while it stays hidden (no full search every decision)
+DODGE_ALL = True            # all in: sidestep bullets / laser charges in every movement mode, not only while strafing
+GUN_SLEW = True             # gun fires when one tick of torso turning puts the aim on the target's body
 LASER_HOLD_LOST = True    # a charging laser that loses its shot keeps holding (not released into cover) ...
 LASER_HOLD_LOST_S = 1.5    # ... for up to this long
 LASER_GUN_LEAD = True     # while the laser charges, aim with the gun's lead (the gun keeps firing) ...

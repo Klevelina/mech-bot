@@ -459,8 +459,23 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             cm = self.combat_move(obs, me, fight_m, t, t_start)
             if cm is not None:
                 move, mode = cm
+        dodge_boost = False
+        if DODGE_ALL and self.all_in and self.nav is not None and mode not in ("STRAFE", "DODGE", "ESCAPE", "HIDDEN"):
+            # retreating, chasing, grabbing a cube, running for the zone...: still sidestep bullets about to hit us
+            # and a laser charging on us (combat movement does this only while strafing)
+            dd = self._cm_dodge(obs, me)
+            if dd is not None:
+                mx2, my2 = move[0] * 0.4 + dd[0] * 0.9, move[1] * 0.4 + dd[1] * 0.9
+                n2 = math.hypot(mx2, my2)
+                if n2 > 1.0:
+                    mx2, my2 = mx2 / n2, my2 / n2
+                move = [mx2, my2]
+                dodge_boost = me["energy"] > 25 and any(
+                    m["kind"] == "mech" and m.get("charging") and
+                    abs(wrap(m["aim"][0] - math.atan2(y - m["pos"][1], x - m["pos"][0]))) < 0.15 for m in obs["mechs"])
         moving = move != [0.0, 0.0]
         jinking, extra_boost = self.evade(obs, me, move, t)
+        extra_boost = extra_boost or dodge_boost
         if jinking:
             move = jinking
 

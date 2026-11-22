@@ -361,7 +361,7 @@ class Nav:
     def flank_cell(self, hide_from, shoot_at, mx, my, max_r=40.0, deadline=None):
         """Nearest walkable cell (searching outward from us) hidden from every eye in `hide_from`
         [(x, y, eye_z), ...] and, if `shoot_at` (x, y, z) is given, with a clear line of fire to it.
-        Returns a cell or -1."""
+        Returns a cell, -1 if none within max_r, or -2 if the deadline ran out first."""
         i0 = int((mx - self.ox) / self.cell)
         j0 = int((my - self.oy) / self.cell)
         W, H, comp, main, surf = self.W, self.H, self.comp, self.main, self.surf
@@ -379,7 +379,7 @@ class Nav:
             for c in cand[::2] if r > 6 else cand:
                 n_c += 1
                 if deadline is not None and n_c & 7 == 0 and time.perf_counter() > deadline:
-                    return -1
+                    return -2  # out of time (not the same as "nothing hidden here")
                 cx, cy = self.center(c)
                 top = surf[c] + 8.5
                 if any(self.los(ex, ey, ez, cx, cy, top, skip=1.0) for ex, ey, ez in hide_from):
