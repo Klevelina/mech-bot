@@ -194,9 +194,12 @@ CUBE_CAP_WANT = True
 # squad all in: supply drops after all (full HP + 3 cubes), but only safe ones - within SAFE_DROP_R, nobody seen or heard
 # within SAFE_DROP_DANGER_R of it in SAFE_DROP_DANGER_S s; given up as soon as someone shows up there; no contests
 SAFE_DROPS = True
-SAFE_DROP_R = 220.0      # (150 in the 4.83 build)
+SAFE_DROP_R = 150.0
 SAFE_DROP_DANGER_R = 100.0
 SAFE_DROP_DANGER_S = 10.0
+# late in a practice match: back to our cautious rules (heal to 90%, late hold fire, vanish when surrounded) from this
+# match time - a team measured that staying in squad attack mode late cost them ~0.35 (265 s: next circle <= 70 m)
+ALLIN_UNTIL = 265.0
 KILL_PILE = True       # (any match) our kill drops its cubes (+2) and weapons where it died: loot target right away
 
 DROP_WAIT_CALM = True  # FREE-FOR-ALL ONLY (vs the squad, 2+ enemies at a drop are hunters coming for us, not a fight):
