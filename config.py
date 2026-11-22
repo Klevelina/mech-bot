@@ -87,7 +87,7 @@ ENGAGE_AIMED_R = 170.0   # ... or its torso points at us with a clear line betwe
 ENGAGE_MIN_HP = 0.4      # not below this HP fraction (our retreat / hide rules take over)
 # squad: finish rush - an enemy below FINISH_RUSH_HP of its max: get close (FINISH_RUSH_R by our weapon) and finish it,
 # while our HP is above FINISH_RUSH_MIN and at most 2 enemies are in sight within 150 m; boost in from further away
-FINISH_RUSH = True
+FINISH_RUSH = False  # (tested off: better)
 FINISH_RUSH_HP = 0.35
 FINISH_RUSH_MIN = 0.45
 FINISH_RUSH_R = {"gun": 18.0, "lightning": 22.0, "laser": 35.0}  # laser is hitscan: no need to be on top of it
@@ -98,8 +98,8 @@ FINISH_RUSH_R = {"gun": 18.0, "lightning": 22.0, "laser": 35.0}  # laser is hits
 # after none of that holds any more
 SQUAD_ALL_IN = True
 ALLIN_NEAR_R = 160.0
-ALLIN_TWO_HP = 0.55
-ALLIN_THREE_HP = 0.8
+ALLIN_TWO_HP = 0.45
+ALLIN_THREE_HP = 0.7
 ALLIN_LOW_HP = 0.35      # ... with the target at least 10 points of HP fraction above us
 ALLIN_TARGET_LOW = 0.25  # never retreat from a target below this (and us above 20%, at most 2 near)
 ALLIN_BACK_S = 1.5
@@ -143,7 +143,7 @@ COMBAT_MOVE_SKIP = ("RETREAT", "RUSH", "FIGHTCUBE", "FINISH", "ESCAPE", "CONTEST
 # ---- squad all in, the rest of the plan:
 # fight distance by what we hold (not the playbook bands): lightning (with energy) close, laser long, gun mid;
 # without lightning stay out of an enemy lightning's / mortar's comfort zone; drones at their own distance
-ALLIN_RANGE = {"lightning": 28.0, "laser": 160.0, "gun": 150.0, "npc": 58.0}  # long range: they miss more, we don't
+ALLIN_RANGE = {"lightning": 28.0, "laser": 220.0, "gun": 150.0, "npc": 58.0}  # long range: they miss more, we don't
 ALLIN_RANGE_VS = {"lightning": 64.0, "mortar": 80.0}  # at least this far from these (when we have no lightning)
 ALLIN_SAFE_S = 3.0       # loot again this long after the last threat (SAFE_AFTER otherwise)
 ALLIN_LOOT_R = 150.0     # loot this far in every phase (crates included)
@@ -170,7 +170,7 @@ CUBE_UPGRADES_UNTIL = 0  # (was 10)   # below this many cubes: plating and our w
 # squad all in, gear first: the first GEAR_UNTIL s we don't start fights with "harmless" mechs (dealt us under
 # GEAR_HARM_DMG, no laser within GEAR_LASER_R, further than GEAR_CLOSE_R): they don't stop our looting and aren't
 # targets; weapons count from GEAR_WEAPON_R, lasers from GEAR_LASER_SEEK_R. Anyone else is fought as usual
-GEAR_FIRST = True
+GEAR_FIRST = False  # (tested off: better)
 GEAR_UNTIL = 120.0
 GEAR_HARM_DMG = 150.0
 GEAR_LASER_R = 170.0
@@ -182,10 +182,10 @@ GEAR_MAX_CUBES = 3
 GEAR_HUNTERS = True    # never harmless either: closing on us at > 3 m/s within 180 m, or aiming at us within 190 m
 # squad all in: gear sweeps (scan.py) - calm: full torso turn every SCAN_EVERY_NOLASER s without a laser (SCAN_EVERY
 # with one); first sweep / no laser yet and energy >= SCAN_JET_E: jump and jet up during it (down to SCAN_JET_STOP)
-SCAN = False            # (gear-sweep scored 3.85 vs 4.25 without: sweeps from cover / jet scans likely hurt)
+SCAN = True             # (gear-sweep scored 3.85 vs 4.25 without: sweeps from cover / jet scans likely hurt)
 SCAN_EVERY_NOLASER = 6.0
 SCAN_EVERY = 15.0
-SCAN_JET_E = 90.0
+SCAN_JET_E = 999.0  # look-around sweeps without jet scans
 SCAN_JET_STOP = 35.0
 SCAN_MECH_R = 150.0      # calm = no enemy that matters this close (harmless ones don't count while gearing) ...
 SCAN_ANY_R = 50.0        # ... and no enemy at all this close
