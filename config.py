@@ -151,7 +151,7 @@ PLAN_JUKE_W = 22.0
 PLAN_BOOST_E = 30.0
 PLAN_BOOST_COST = 6.0
 COMBAT_MOVE_SKIP = ("RETREAT", "RUSH", "FIGHTCUBE", "FINISH", "ESCAPE", "CONTEST", "SNIPE", "PURSUE", "DISENGAGE",
-                    "HIDE", "HIDDEN", "VANISH", "drop", "DROPWATCH", "ZONE", "HEALDROP")  # ZONE: the circle run beats strafing
+                    "HIDE", "HIDDEN", "VANISH", "drop", "DROPWATCH", "ZONE", "HEALDROP", "REST")  # ZONE: the circle run beats strafing
 # ---- squad all in, the rest of the plan:
 # fight distance by what we hold (not the playbook bands): lightning (with energy) close, laser long, gun mid;
 # without lightning stay out of an enemy lightning's / mortar's comfort zone; drones at their own distance
@@ -229,6 +229,22 @@ CUBES_TO_15 = False    # (was on) past the 10-cube stat cap, no more cube detour
 # within SAFE_DROP_DANGER_R of it in SAFE_DROP_DANGER_S s; given up as soon as someone shows up there; no contests
 # all in, hurt (below HEAL_DROP_HP) in a fight: go capture the nearest supply drop within HEAL_DROP_R that lands by the
 # time we get there (+ HEAL_DROP_EARLY_S), inside the circle - its full repair comes before cover and before the fight
+# all in, which fights to start (until PICK_FIGHTS_UNTIL s): a mech coming for us (hit us in 8 s, walking at us, or
+# charging a laser at us) is always fought; any other only if we're above PICK_MIN_HP, it's below PICK_WEAK or dies in
+# PICK_TTK_S at PICK_OUR_DPS, no other mech stands within PICK_ISO_R of it, and the next one coming for us arrives after
+PICK_FIGHTS = True
+PICK_FIGHTS_UNTIL = 250.0
+PICK_MIN_HP = 0.75
+PICK_WEAK = 0.55
+PICK_TTK_S = 7.0
+PICK_OUR_DPS = 110.0
+PICK_ISO_R = 130.0
+# all in, after REST_AFTER_KILLS kills: nothing hit us for 1 s and no mech within REST_NEAR_R -> stand and regenerate
+# from below REST_BELOW_HP back to REST_TO_HP
+REST_AFTER_KILLS = 5
+REST_NEAR_R = 70.0
+REST_BELOW_HP = 0.75
+REST_TO_HP = 0.95
 HEAL_DROP = True
 HEAL_DROP_HP = 0.95
 HEAL_DROP_R = 250.0
