@@ -197,6 +197,8 @@ SAFE_DROPS = True
 SAFE_DROP_R = 150.0
 SAFE_DROP_DANGER_R = 100.0
 SAFE_DROP_DANGER_S = 10.0
+# squad all in: nanites right after plating (out-of-fight regen +60%, starts 1.5 s sooner) - we never stop to heal
+NANITES_EARLY = True
 KILL_PILE = True       # (any match) our kill drops its cubes (+2) and weapons where it died: loot target right away
 
 DROP_WAIT_CALM = True  # FREE-FOR-ALL ONLY (vs the squad, 2+ enemies at a drop are hunters coming for us, not a fight):
