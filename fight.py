@@ -304,40 +304,6 @@ class FightMixin:
         cap = self.cfg["cubes"].get("stat_cap", 10)
         return c < cap or (CUBES_TO_15 and 13 <= c < 15)
 
-    def coming_for_us(self, me, m, t):
-        """PICK_FIGHTS: m hit us lately, is walking at us, or charges a laser with its aim on us."""
-        if t - self.attackers.get(m["id"], -1e9) < 8.0:
-            return True
-        x, y = me["pos"][0], me["pos"][1]
-        dx, dy = x - m["pos"][0], y - m["pos"][1]
-        d = math.hypot(dx, dy) or 1.0
-        if 35.0 < d < 320.0 and (m["vel"][0] * dx + m["vel"][1] * dy) / d > 3.0:
-            return True
-        return bool(m.get("charging")) and abs(wrap(m["aim"][0] - math.atan2(dy, dx))) < 0.08
-
-    def fight_allowed(self, me, m, seen, t):
-        """PICK_FIGHTS: always fight what comes for us; anything else only when we're healthy, it dies fast (or is
-        weak), nobody stands near it, and we'd finish it before the next mech coming for us gets here."""
-        if self.coming_for_us(me, m, t):
-            return True
-        if me["hp"] < PICK_MIN_HP * me["max_hp"]:
-            return False
-        hp = m.get("hp") or 1400.0
-        ttk = hp / PICK_OUR_DPS
-        if not (hp < PICK_WEAK * (m.get("max_hp") or 1400.0) or ttk < PICK_TTK_S):
-            return False
-        mx_, my_ = m["pos"][0], m["pos"][1]
-        if any(o["id"] != m["id"] and math.hypot(o["pos"][0] - mx_, o["pos"][1] - my_) < PICK_ISO_R for o in seen):
-            return False
-        x, y = me["pos"][0], me["pos"][1]
-        walk = me["stats"].get("walk_speed", 11.7)
-        eta = 1e9
-        for o in seen:
-            if o["id"] != m["id"] and self.coming_for_us(me, o, t):
-                d = math.hypot(o["pos"][0] - x, o["pos"][1] - y)
-                eta = min(eta, 0.0 if d < 120.0 else (d * 1.3 - 60.0) / walk)
-        return eta > ttk + 2.0
-
     def gear_harmless(self, me, m):
         """GEAR_FIRST: m hasn't hurt us much, carries no laser close by and isn't on top of us."""
         x, y = me["pos"][0], me["pos"][1]
