@@ -102,6 +102,9 @@ ALLIN_THREE_HP = 0.8
 ALLIN_LOW_HP = 0.35      # ... with the target at least 10 points of HP fraction above us
 ALLIN_TARGET_LOW = 0.25  # never retreat from a target below this (and us above 20%, at most 2 near)
 ALLIN_BACK_S = 1.5
+ALLIN_RECOVER = True      # below RECOVER_LO HP: retreat to cover and stay until RECOVER_HI (a 5.85 bot's last gain)
+ALLIN_RECOVER_LO = 0.25
+ALLIN_RECOVER_HI = 0.6
 ALLIN_COVER_R = 45.0     # retreat to a spot within this far that the enemies in sight can't see (else straight away)
 # laser: let go early when what's charged already kills the target (x margin), instead of giving it time to duck away
 LASER_KILLSHOT = True
