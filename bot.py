@@ -178,10 +178,6 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
                 mechs = [m for m in mechs if m not in calm]
                 if not mechs and self.threat_t == t and t - self.last_dmg_t > 0.05:
                     self.threat_t = prev_threat_t  # only harmless ones in sight: keep looting
-        if NO_FIRST and self.all_in and mechs and not any(w and w["kind"] == "laser" for w in weapons):
-            # no laser of our own: don't start fights - only with mechs that hit us lately or are right here,
-            # and never with a laser carrier (it outranges us); they still count as danger for looting
-            mechs = [m for m in mechs if not self.hold_fire_on(me, m, t)]
         if KILL_PILE:
             for e in obs["events"]:
                 if e["type"] == "kill" and e.get("target") in self.epos:
