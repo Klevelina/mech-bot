@@ -477,6 +477,8 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             boost = True  # the circle is coming: run
         if mode == "DISENGAGE" and dgoal > 3.0 and me["energy"] > 30:
             boost = True  # reach the hiding spot fast
+        if RETREAT_BOOST and mode == "RETREAT" and dgoal > 3.0 and me["energy"] > RETREAT_BOOST_E:
+            boost = True  # all-in retreat under fire: run to cover (19.5 m/s, not 11.7)
         if LOOT_BOOST and mode in ("cube", "pickup", "crate", "npc", "pile", "explore") and dgoal > 15.0 and \
                 me["energy"] > LOOT_BOOST_E:
             boost = True  # run (19.5 m/s, not 11.7) on loot trips, keeping energy for fights and escapes

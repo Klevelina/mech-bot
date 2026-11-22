@@ -103,6 +103,8 @@ ALLIN_THREE_HP = 0.8
 ALLIN_LOW_HP = 0.35      # ... with the target at least 10 points of HP fraction above us
 ALLIN_TARGET_LOW = 0.25  # never retreat from a target below this (and us above 20%, at most 2 near)
 ALLIN_BACK_S = 1.5
+RETREAT_BOOST = True      # the all-in retreat boosts to its cover spot ...
+RETREAT_BOOST_E = 10.0    # ... with more energy than this
 ALLIN_RECOVER = True      # below RECOVER_LO HP: retreat to cover and stay until RECOVER_HI (a 5.85 bot's last gain)
 ALLIN_RECOVER_LO = 0.25
 ALLIN_RECOVER_HI = 0.6
@@ -130,7 +132,7 @@ COMBAT_OTHERS_R = 170.0  # other enemies this close count (up to 3)
 COMBAT_DODGE_S = 0.7     # sidestep bullets that would hit us within this many seconds
 # modes that keep their own movement (retreat, finishing, cubes, escapes, drop contests, pursuit out of sight)
 COMBAT_MOVE_SKIP = ("RETREAT", "RUSH", "FIGHTCUBE", "FINISH", "ESCAPE", "CONTEST", "SNIPE", "PURSUE", "DISENGAGE",
-                    "HIDE", "HIDDEN", "VANISH", "drop", "DROPWATCH")
+                    "HIDE", "HIDDEN", "VANISH", "drop", "DROPWATCH", "ZONE")  # ZONE: the circle run beats strafing
 # ---- squad all in, the rest of the plan:
 # fight distance by what we hold (not the playbook bands): lightning (with energy) close, laser long, gun mid;
 # without lightning stay out of an enemy lightning's / mortar's comfort zone; drones at their own distance
