@@ -460,6 +460,8 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             move = [move[0] * VANISH_WALK, move[1] * VANISH_WALK]  # ... and no footsteps (under 5 m/s)
         if mode == "RUSH" and dgoal > 25.0 and me["energy"] > 30:
             boost = True  # finish rush: get there before it gets away / heals
+        if STRAFE_BOOST and mode in ("STRAFE", "DODGE") and move != [0.0, 0.0] and me["energy"] > STRAFE_BOOST_E:
+            boost = True  # strafing / dodging at run speed (19.5 m/s, not 11.7): much harder to hit at range
         if mode == "ZONE" and dgoal > 6.0 and me["energy"] > 5:
             boost = True  # the circle is coming: run
         if mode == "DISENGAGE" and dgoal > 3.0 and me["energy"] > 30:
