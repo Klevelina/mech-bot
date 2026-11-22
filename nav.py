@@ -54,6 +54,34 @@ class Nav:
         N = W * H
         self.W, self.H, self.N = W, H, N
 
+        # --- tree crowns per cell: lowest crown bottom / highest crown top over it (sight only: shots pass trees)
+        self.cbase = array.array("f", [1e9]) * N
+        self.ctop = array.array("f", [-1e9]) * N
+        trees = world.get("trees") or {}
+        tf = trees.get("fields") or []
+        td = trees.get("data") or []
+        if tf and td and all(k in tf for k in ("x", "y", "z", "height", "crownR", "crownBase")):
+            nf = len(tf)
+            ix, iy, iz, ih, ir, ib = (tf.index(k) for k in ("x", "y", "z", "height", "crownR", "crownBase"))
+            icx = tf.index("crownX") if "crownX" in tf else ix
+            icy = tf.index("crownY") if "crownY" in tf else iy
+            for q in range(0, len(td) - nf + 1, nf):
+                cx_, cy_, z_ = td[q + icx], td[q + icy], td[q + iz]
+                r_, lo, hi = td[q + ir], z_ + td[q + ib], z_ + td[q + ih]
+                i0, i1 = int((cx_ - r_ - tx0) / cell), int((cx_ + r_ - tx0) / cell)
+                j0, j1 = int((cy_ - r_ - ty0) / cell), int((cy_ + r_ - ty0) / cell)
+                for j in range(max(0, j0), min(H - 1, j1) + 1):
+                    for i in range(max(0, i0), min(W - 1, i1) + 1):
+                        if math.hypot(tx0 + (i + 0.5) * cell - cx_, ty0 + (j + 0.5) * cell - cy_) <= r_:
+                            c = j * W + i
+                            if lo < self.cbase[c]:
+                                self.cbase[c] = lo
+                            if hi > self.ctop[c]:
+                                self.ctop[c] = hi
+        rules = world.get("rules") or {}
+        # a sight line is lost after this many metres of crown (transmission exp(-density x m) under the block level)
+        self.crown_block_m = math.log(1.0 / max(1e-3, rules.get("canopyBlockT", 0.25))) / max(1e-3, rules.get("canopyDensity", 0.35))
+
         # --- ground at cell centers (nearest terrain vertex)
         ground = array.array("f", [0.0]) * N
         vcol = [min(tnx - 1, int(round((i + 0.5) * cell / ts))) for i in range(W)]
@@ -259,9 +287,11 @@ class Nav:
                 return best
         return c0
 
-    def exposure(self, c, rays=12, reach=60.0):
+    def exposure(self, c, rays=12, reach=60.0, canopy=False):
         """How open cell c is: of `rays` horizontal directions from eye height, how many see `reach` m
-        without hitting a building or terrain. Returns (open count, yaw to face = mean open direction or None)."""
+        without hitting a building or terrain (with `canopy`, or enough tree crown: anyone past the 45 m proximity
+        range can't see through it, while shots still pass). Returns (open count, yaw to face = mean open direction
+        or None)."""
         cx, cy = self.center(c)
         z0 = self.surf[c] + 8.0
         ftop, fbase, SW, SH, ox, oy, sub = self.ftop, self.fbase, self.SW, self.SH, self.ox, self.oy, self.sub
@@ -272,8 +302,16 @@ class Nav:
             dx, dy = math.cos(a), math.sin(a)
             blocked = False
             d = 2.0
+            crown = 0.0
             while d <= reach:
                 px, py = cx + dx * d, cy + dy * d
+                if canopy:
+                    cc = self.cell_of(px, py)
+                    if self.cbase[cc] <= z0 <= self.ctop[cc]:
+                        crown += 2.0
+                        if crown >= self.crown_block_m:
+                            blocked = True
+                            break
                 i, j = int((px - ox) / sub), int((py - oy) / sub)
                 if not (0 <= i < SW and 0 <= j < SH):
                     blocked = True  # map edge
