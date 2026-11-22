@@ -381,3 +381,12 @@ B2_HP_W = 0.045
 B2_RANGE_K = 1.0
 B2_FLIP_S = 2.2
 HEAL_DROP_ANY = False
+
+# ---- brain 3 (practice): pick fights, fight them at long range (brain3.py)
+B3 = True
+B3_CLOSE_R = 60.0
+B3_COMING_R = 190.0
+B3_AVOID_R = 150.0
+B3_AVOID_W = 8.0
+B3_KITE_R = 90.0
+B3_BAND = (140.0, 190.0)
