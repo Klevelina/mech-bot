@@ -60,6 +60,7 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         self.fire_since = {}    # id -> when we started shooting at it
         self.cur = None         # current fight target id
         self.laser_lost_t = None  # when our charging laser lost its shot (LASER_HOLD_LOST)
+        self.laser_full_t = None  # when our laser reached full charge (LASER_RELEASE_ON_AIM)
         self.escape = None      # dict(src=id, goal=(x, y), t=start) while breaking line of sight
         self.escape_check_t = -1e9
         self.target = None      # loot item id
@@ -121,6 +122,7 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         me = obs["self"]
         x, y, z = me["pos"]
         t = obs["t"]
+        self.now_t = t
         zone = obs["zone"]
         weapons = me["weapons"]
         act: mf.Action = {"tick": obs["tick"]}

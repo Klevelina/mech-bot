@@ -48,7 +48,15 @@ class FightMixin:
                 continue
             k, st = w["kind"], w["stats"]
             if k == "gun":
-                out[i] = gun_ok and err < tol * 1.5 and dist < st.get("range", 230) and w.get("ammo", 1) > 0
+                if GUN_SLEW:
+                    # the torso turns before the shot leaves: what's left after one tick of turning must be on its body
+                    ms = me.get("stats", {})
+                    ey = max(0.0, abs(wrap(aim[0] - cur[0])) - ms.get("turn_rate", 4.0) * 0.05)
+                    ep = max(0.0, abs(aim[1] - cur[1]) - ms.get("pitch_rate", 3.0) * 0.05)
+                    on = ey < math.atan2(0.75 * size, max(dist, 1.0)) and ep < math.atan2(1.4 * size, max(dist, 1.0))
+                else:
+                    on = err < tol * 1.5
+                out[i] = gun_ok and on and dist < st.get("range", 230) and w.get("ammo", 1) > 0
             elif k == "lightning":
                 cone = math.radians(st.get("cone_deg", 30)) / 2
                 out[i] = dist < st.get("range", 45) * 0.95 and abs(wrap(cur[0] - aim[0])) < cone * 0.8 \
@@ -62,6 +70,17 @@ class FightMixin:
                 # never look full - we'd hold on until the 2 s auto-fire, wherever we aim by then
                 out[i] = dist < st.get("range", 280) and w.get("cooldown", 0) <= 0.05 and charge < full - LASER_FULL_TOL \
                     and (charge > 0 or (err < tol * 3 and not (PLAYBOOK and getattr(self, "lit_near", False))))
+                if LASER_RELEASE_ON_AIM and charge >= full - LASER_FULL_TOL:
+                    # full: the beam goes where the torso points when we let go - only let go on its body; keep
+                    # holding while the torso is still swinging onto it (up to LASER_FULL_HOLD_S, then it goes anyway)
+                    now = getattr(self, "now_t", 0.0)
+                    if self.laser_full_t is None:
+                        self.laser_full_t = now
+                    on = abs(wrap(cur[0] - aim[0])) < math.atan2(0.68 * size, max(dist, 1.0)) and \
+                        abs(cur[1] - aim[1]) < math.atan2(1.4 * size, max(dist, 1.0))
+                    out[i] = not on and now - self.laser_full_t < LASER_FULL_HOLD_S
+                elif charge < full - LASER_FULL_TOL:
+                    self.laser_full_t = None
         return out
 
     def hit_zoff(self, me, m):
