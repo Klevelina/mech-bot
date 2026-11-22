@@ -764,6 +764,14 @@ class FightMixin:
             # all in, one short priority list: retreat and finish rush (above), then engage / pursue; otherwise
             # no fight goal - combat movement (strafe at our range, out of the others' sight) does the rest.
             # The older rules below (lone-enemy hunt, odds disengage, flank / avoid / hide, playbook bands) are skipped
+            if WAIT_FOR_HUNTER and m["kind"] == "mech" and not self.can_hit(me, m) and \
+                    any(w and w["kind"] == "laser" for w in me["weapons"]) and \
+                    (t - getattr(self, "came_at", {}).get(m["id"], -1e9) < 8.0 or t - self.attackers.get(m["id"], -1e9) < 8.0) \
+                    and (m.get("hp") or 1400.0) >= WAIT_HUNTER_HP * (m.get("max_hp") or 1400.0):
+                # a hunter on its way to us just went out of sight: don't walk round the corner into its gun - stay
+                # here, laser charging, and let it step into our line of fire
+                self.fight_goal, self.fight_mode = (me["pos"][0], me["pos"][1]), "HOLD"
+                return
             if m["kind"] == "mech":
                 g = self.engage_goal(me, m, t, d, theirs)
                 if g is not None:
