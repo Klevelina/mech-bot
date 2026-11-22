@@ -176,7 +176,7 @@ ZONE_PAD = 8.0
 ZONE_SPARE_S = 3.0
 # combat movement: favour steps outside the target's front arc (our hits x1.5 there)
 REAR_ARC = True
-REAR_ARC_W = 20.0        # score for a step behind it (40% of that for its flank, 60-90 degrees off its aim)
+REAR_ARC_W = 35.0        # (20 in the 4.73 build) score for a step behind it (40% of that for its flank, 60-90 degrees off its aim)
 KILL_PILE = True       # (any match) our kill drops its cubes (+2) and weapons where it died: loot target right away
 
 DROP_WAIT_CALM = True  # FREE-FOR-ALL ONLY (vs the squad, 2+ enemies at a drop are hunters coming for us, not a fight):
