@@ -309,11 +309,18 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         vanish_goal = self.update_vanish(me, obs["mechs"], fight_m, t, t_start) if (self.escape is None and not self.all_in) else None
         hidden = vanish_goal is not None and self.vanish_hidden()
         safe = t - self.threat_t > SAFE_AFTER
+        zone_goal = self.zone_must(me, zone, t) if (ZONE_FIRST and self.nav is not None) else None
         if self.escape is not None:
             self.set_goal(self.escape["goal"], x, y)
             dgoal = math.hypot(self.escape["goal"][0] - x, self.escape["goal"][1] - y)
             stop_r = 1.5
             mode = "ESCAPE"
+        elif zone_goal is not None:
+            # outside the circle, or it would catch us: get in now, whatever the fight
+            self.set_goal(zone_goal, x, y)
+            dgoal = math.hypot(zone_goal[0] - x, zone_goal[1] - y)
+            stop_r = 3.0
+            mode = "ZONE"
         elif vanish_goal is not None:
             self.set_goal(vanish_goal, x, y)
             dgoal = math.hypot(vanish_goal[0] - x, vanish_goal[1] - y)
@@ -453,6 +460,8 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             move = [move[0] * VANISH_WALK, move[1] * VANISH_WALK]  # ... and no footsteps (under 5 m/s)
         if mode == "RUSH" and dgoal > 25.0 and me["energy"] > 30:
             boost = True  # finish rush: get there before it gets away / heals
+        if mode == "ZONE" and dgoal > 6.0 and me["energy"] > 5:
+            boost = True  # the circle is coming: run
         if mode == "DISENGAGE" and dgoal > 3.0 and me["energy"] > 30:
             boost = True  # reach the hiding spot fast
         if LOOT_BOOST and mode in ("cube", "pickup", "crate", "npc", "pile", "explore") and dgoal > 15.0 and \
