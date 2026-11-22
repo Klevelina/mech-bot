@@ -69,7 +69,10 @@ class FightMixin:
                 # the obs rounds to 0.01: an upgraded full charge (0.5625, 0.421875) shows as 0.56 / 0.42 and would
                 # never look full - we'd hold on until the 2 s auto-fire, wherever we aim by then
                 out[i] = dist < st.get("range", 280) and w.get("cooldown", 0) <= 0.05 and charge < full - LASER_FULL_TOL \
-                    and (charge > 0 or (err < tol * 3 and not (PLAYBOOK and getattr(self, "lit_near", False))))
+                    and (charge > 0 or (err < max(tol * 3, LASER_START_ERR) and
+                                        not (PLAYBOOK and getattr(self, "lit_near", False))))
+                # (the torso turns 4 rad/s: a 0.6 rad swing is done in 0.15 s, long before the 0.75 s charge is full -
+                # start charging during the turn; the full-charge release still waits until we're on its body)
                 if LASER_RELEASE_ON_AIM and charge >= full - LASER_FULL_TOL:
                     # full: the beam goes where the torso points when we let go - only let go on its body; keep
                     # holding while the torso is still swinging onto it (up to LASER_FULL_HOLD_S, then it goes anyway)
@@ -311,6 +314,14 @@ class FightMixin:
             return False  # a laser can hurt us from anywhere in sight
         if GEAR_STRICT and (m.get("cubes") or 0) > GEAR_MAX_CUBES:
             return False  # a strong (cube-rich) mech: deal with it
+        if GEAR_HUNTERS:
+            # a hunter on its way in (closing fast) or with its gun on us is about to shoot first: take it on now
+            ex, ey = m["pos"][0], m["pos"][1]
+            closing = (m["vel"][0] * (x - ex) + m["vel"][1] * (y - ey)) / max(d, 1.0)
+            if closing > 3.0 and d < 180.0:
+                return False
+            if d < 190.0 and abs(wrap(m["aim"][0] - math.atan2(y - ey, x - ex))) < 0.25:
+                return False
         dealt = sum(a for _, a in self.dmg_log.get(m["id"], ()))
         return dealt < GEAR_HARM_DMG
 

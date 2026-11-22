@@ -114,7 +114,8 @@ ALLIN_RECOVER_HI = 0.6
 ALLIN_COVER_R = 45.0     # retreat to a spot within this far that the enemies in sight can't see (else straight away)
 # laser: let go early when what's charged already kills the target (x margin), instead of giving it time to duck away
 LASER_KILLSHOT = True
-LASER_RELEASE_ON_AIM = True  # a full laser is let go only with the torso on the target's body ...
+LASER_START_ERR = 0.6        # start a laser charge once the torso is within this (rad) of the aim (was ~3 body widths)
+LASER_RELEASE_ON_AIM = True # a full laser is let go only with the torso on the target's body ...
 LASER_FULL_HOLD_S = 1.2      # ... or after holding it full this long (it fires on its own after 2 s)
 GUN_SLEW = True              # gun fires when one tick of torso turning puts the aim on the target's body
 LASER_HOLD_LOST = True    # a charging laser that loses its shot keeps holding (not released into cover) ...
@@ -178,6 +179,7 @@ GEAR_WEAPON_R = 400.0
 GEAR_LASER_SEEK_R = 300.0
 GEAR_STRICT = True     # never harmless: a laser carrier at any distance, or more than GEAR_MAX_CUBES cubes
 GEAR_MAX_CUBES = 3
+GEAR_HUNTERS = True    # never harmless either: closing on us at > 3 m/s within 180 m, or aiming at us within 190 m
 # squad all in: gear sweeps (scan.py) - calm: full torso turn every SCAN_EVERY_NOLASER s without a laser (SCAN_EVERY
 # with one); first sweep / no laser yet and energy >= SCAN_JET_E: jump and jet up during it (down to SCAN_JET_STOP)
 SCAN = False            # (gear-sweep scored 3.85 vs 4.25 without: sweeps from cover / jet scans likely hurt)
