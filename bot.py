@@ -484,6 +484,8 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             boost = True  # finish rush: get there before it gets away / heals
         if mode == "HEALDROP" and dgoal > 6.0 and me["energy"] > 20:
             boost = True  # get to the drop's ring and start the capture
+        if mode == "STRAFE" and getattr(self, "cm_boost", False):
+            boost = True  # kiting: open the distance to a mech that came too close (or a lightning carrier)
         if mode == "ZONE" and dgoal > 6.0 and me["energy"] > 5:
             boost = True  # the circle is coming: run
         if mode == "DISENGAGE" and dgoal > 3.0 and me["energy"] > 30:

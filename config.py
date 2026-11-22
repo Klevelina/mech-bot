@@ -143,7 +143,7 @@ COMBAT_MOVE_SKIP = ("RETREAT", "RUSH", "FIGHTCUBE", "FINISH", "ESCAPE", "CONTEST
 # ---- squad all in, the rest of the plan:
 # fight distance by what we hold (not the playbook bands): lightning (with energy) close, laser long, gun mid;
 # without lightning stay out of an enemy lightning's / mortar's comfort zone; drones at their own distance
-ALLIN_RANGE = {"lightning": 28.0, "laser": 140.0, "gun": 85.0, "npc": 58.0}
+ALLIN_RANGE = {"lightning": 28.0, "laser": 160.0, "gun": 150.0, "npc": 58.0}  # long range: they miss more, we don't
 ALLIN_RANGE_VS = {"lightning": 64.0, "mortar": 80.0}  # at least this far from these (when we have no lightning)
 ALLIN_SAFE_S = 3.0       # loot again this long after the last threat (SAFE_AFTER otherwise)
 ALLIN_LOOT_R = 150.0     # loot this far in every phase (crates included)
@@ -217,6 +217,14 @@ CUBES_TO_15 = False    # (was on) past the 10-cube stat cap, no more cube detour
 # within SAFE_DROP_DANGER_R of it in SAFE_DROP_DANGER_S s; given up as soon as someone shows up there; no contests
 # all in, hurt (below HEAL_DROP_HP) in a fight: go capture the nearest supply drop within HEAL_DROP_R that lands by the
 # time we get there (+ HEAL_DROP_EARLY_S), inside the circle - its full repair comes before cover and before the fight
+# kite on boost (all in, combat movement): a target inside KITE_BOOST_R and 10 m inside our range -> back off on boost
+KITE_BOOST = True
+KITE_BOOST_R = 90.0
+KITE_BOOST_E = 30.0
+# keep every lightning carrier beyond LIGHTNING_KEEP_R (its arc is 45 m and never misses)
+LIGHTNING_KEEP = True
+LIGHTNING_KEEP_R = 53.0
+LIGHTNING_KEEP_W = 60.0
 HEAL_DROP = True
 HEAL_DROP_HP = 0.95
 HEAL_DROP_R = 250.0
