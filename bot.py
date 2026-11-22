@@ -452,7 +452,8 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             if d > 0.3:
                 move = [dx / d, dy / d]
         # squad all in, in a fight with a line of fire: keep moving (strafe at our range, hidden from the others, dodge)
-        if COMBAT_MOVE and self.all_in and fight_m is not None and mode not in COMBAT_MOVE_SKIP:
+        if COMBAT_MOVE and self.all_in and fight_m is not None and \
+                (mode not in COMBAT_MOVE_SKIP or (mode == "PURSUE" and self.reload_ducking(me))):
             cm = self.combat_move(obs, me, fight_m, t, t_start)
             if cm is not None:
                 move, mode = cm
