@@ -119,6 +119,10 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
         t_start = time.perf_counter()
         me = obs["self"]
         x, y, z = me["pos"]
+        if SIZE_AWARE and self.nav is not None:
+            sc = 1.0 + self.size_per_cube * me.get("cubes", 0)
+            self.nav.body_top = 9.0 * sc - 0.5
+            self.nav.muzzle_z = me["stats"].get("muzzle_height", 7.0 * sc)
         t = obs["t"]
         zone = obs["zone"]
         weapons = me["weapons"]
