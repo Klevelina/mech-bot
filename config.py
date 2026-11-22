@@ -186,6 +186,11 @@ FFA_ENDGAME = True
 FFA_END_ALIVE = 4
 FFA_END_HIT_S = 5.0
 FFA_END_WEAK = 0.3
+# squad all in, gear details: without a laser, one within GRAB_LASER_R is grabbed even mid-fight (swapping out lightning
+# / mortar); cubes stop pulling us once the stat bonus is capped (10), except on the way to the 15-cube upgrade
+GRAB_LASER = True
+GRAB_LASER_R = 40.0
+CUBE_CAP_WANT = True
 KILL_PILE = True       # (any match) our kill drops its cubes (+2) and weapons where it died: loot target right away
 
 DROP_WAIT_CALM = True  # FREE-FOR-ALL ONLY (vs the squad, 2+ enemies at a drop are hunters coming for us, not a fight):
