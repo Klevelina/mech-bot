@@ -138,6 +138,18 @@ COMBAT_STEP = 6.0
 COMBAT_OTHERS_R = 170.0  # other enemies this close count (up to 3)
 COMBAT_DODGE_S = 0.7     # sidestep bullets that would hit us within this many seconds
 # modes that keep their own movement (retreat, finishing, cubes, escapes, drop contests, pursuit out of sight)
+# combat movement as a short-horizon planner: stand, 16 walking and 8 boosted directions simulated with acceleration
+# for PLAN_STEPS x PLAN_DT s; same scoring at the path's end, minus PLAN_PROJ_W x the damage of bullets already in the
+# air that would hit us along it (and a charging laser aimed at us), plus a juke across a gun aimed at us 30-80 m away
+COMBAT_PLAN = True
+PLAN_STEPS = 8
+PLAN_DT = 0.05
+PLAN_MARGIN = 1.5
+PLAN_PROJ_W = 1.2
+PLAN_JUKE_R = (30.0, 80.0)
+PLAN_JUKE_W = 22.0
+PLAN_BOOST_E = 30.0
+PLAN_BOOST_COST = 6.0
 COMBAT_MOVE_SKIP = ("RETREAT", "RUSH", "FIGHTCUBE", "FINISH", "ESCAPE", "CONTEST", "SNIPE", "PURSUE", "DISENGAGE",
                     "HIDE", "HIDDEN", "VANISH", "drop", "DROPWATCH", "ZONE", "HEALDROP")  # ZONE: the circle run beats strafing
 # ---- squad all in, the rest of the plan:
