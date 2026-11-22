@@ -58,7 +58,9 @@ class FightMixin:
                 full = st.get("charge", 0.75)
                 # hold to charge while on target; let go once full (fires on release)
                 # don't start a charge with a lightning carrier close by: its arc would cancel it
-                out[i] = dist < st.get("range", 280) and w.get("cooldown", 0) <= 0.05 and charge < full \
+                # the obs rounds to 0.01: an upgraded full charge (0.5625, 0.421875) shows as 0.56 / 0.42 and would
+                # never look full - we'd hold on until the 2 s auto-fire, wherever we aim by then
+                out[i] = dist < st.get("range", 280) and w.get("cooldown", 0) <= 0.05 and charge < full - LASER_FULL_TOL \
                     and (charge > 0 or (err < tol * 3 and not (PLAYBOOK and getattr(self, "lit_near", False))))
         return out
 
@@ -223,7 +225,7 @@ class FightMixin:
                 continue
             st, charge = w["stats"], w.get("charge", 0.0)
             full = st.get("charge", 0.75)
-            if charge < st.get("min_charge", 0.15) or charge >= full or dist > st.get("range", 280) * 0.97:
+            if charge < st.get("min_charge", 0.15) or charge >= full - LASER_FULL_TOL or dist > st.get("range", 280) * 0.97:
                 continue
             frac = st.get("min_frac", 0.35) + (1 - st.get("min_frac", 0.35)) * charge / full
             dmg = st.get("damage", 315) * frac * (1 + self.cfg["cubes"].get("damage_per_cube", 0.04) *

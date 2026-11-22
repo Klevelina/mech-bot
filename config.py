@@ -103,6 +103,7 @@ ALLIN_BACK_S = 1.5
 ALLIN_COVER_R = 45.0     # retreat to a spot within this far that the enemies in sight can't see (else straight away)
 # laser: let go early when what's charged already kills the target (x margin), instead of giving it time to duck away
 LASER_KILLSHOT = True
+LASER_FULL_TOL = 0.011    # a laser charge within this of full counts as full (the obs rounds to 0.01)
 LASER_KILLSHOT_MARGIN = 0.85
 # squad all in: walk over loose cubes close by during a fight (each is +4% HP and damage at once)
 FIGHT_CUBES = True
