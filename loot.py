@@ -1,7 +1,7 @@
 """Loot: remember items we have seen, pick what to go for, weapon swap rules, upgrade picks."""
 import math
 
-from config import CUBES_TO_15, CUBE_CAP_WANT, LASER_FIRST, LIGHTNING_FIRST, PLAYBOOK, DROP_GUN_FOR_PAIR, MORTAR_USE, UPGRADE_BY_LOADOUT, \
+from config import LASER_ZONE_LOOSE, LASER_IGNORE_DANGER, LASER_PICK_V, CUBES_TO_15, CUBE_CAP_WANT, LASER_FIRST, LIGHTNING_FIRST, PLAYBOOK, DROP_GUN_FOR_PAIR, MORTAR_USE, UPGRADE_BY_LOADOUT, \
     POWER, POWER_WEAPON_V, POWER_DRONE_V, POWER_R, POWER_MORE, POWER_CRATE_V
 
 # What a found item is worth before distance (rough "cubes" scale).
@@ -167,7 +167,7 @@ class Memory:
             it["ok"], it["cell"] = ok, cell
         return it["cell"] if it["ok"] else -1
 
-    def best_target(self, me, zone, weapons, late, max_dist, danger, skip=(), phase=None, laser_seek=0.0,
+    def best_target(self, me, zone, weapons, late, max_dist, danger, skip=(), phase=None, laser_seek=0.0, now_t=0.0,
                     drone_v=0.0, weapon_r=0.0):
         """(id, item) worth going for, or (None, None). `danger(x, y)` -> True to skip.
         POWER: no laser/lightning yet -> those are the top target (up to POWER_R away); early phase -> drones next."""
@@ -217,14 +217,21 @@ class Memory:
                 reach = max(reach, weapon_r)  # gear first: any weapon we'd take is worth a long walk
             if laser_seek and k == "pickup" and it["wkind"] == "laser":
                 # a laser we'd take (empty slot, or in place of lightning / mortar): worth a long walk
-                v, reach = max(v, POWER_WEAPON_V), max(reach, laser_seek)
+                v, reach = max(v, LASER_PICK_V), max(reach, laser_seek)
             ix, iy = it["x"], it["y"]
             dist = math.hypot(ix - x, iy - y)
             if dist > reach:
                 continue
-            if math.hypot(ix - nc[0], iy - nc[1]) > nr - 5 or math.hypot(ix - cc[0], iy - cc[1]) > cr - 5:
+            is_laser = laser_seek and k == "pickup" and it["wkind"] == "laser"
+            out_next = math.hypot(ix - nc[0], iy - nc[1]) > nr - 5
+            if out_next and is_laser and LASER_ZONE_LOOSE:
+                # outside the next circle but worth it if there's time to get there and back in before it closes
+                back = math.hypot(ix - nc[0], iy - nc[1]) - (nr - 5)
+                walk = me["stats"].get("walk_speed", 11.7)
+                out_next = zone.get("shrink_end", 1e9) - now_t < (dist + back) * 1.3 / walk + 10.0
+            if out_next or math.hypot(ix - cc[0], iy - cc[1]) > cr - 5:
                 continue
-            if danger(ix, iy):
+            if danger(ix, iy) and not (is_laser and LASER_IGNORE_DANGER):
                 continue
             if self.reachable_cell(it) < 0:
                 continue

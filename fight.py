@@ -304,6 +304,32 @@ class FightMixin:
         cap = self.cfg["cubes"].get("stat_cap", 10)
         return c < cap or (CUBES_TO_15 and 13 <= c < 15)
 
+    def laser_run_goal(self, obs, me, t):
+        """LASER_RUN: (x, y) of the nearest known, reachable laser within LASER_RUN_R when we hold none and could take
+        it, with no enemy standing within LASER_RUN_CLEAR of it. None otherwise."""
+        if any(w and w["kind"] == "laser" for w in me["weapons"]) or self.nav is None:
+            return None
+        from loot import weapon_take
+        if weapon_take("laser", me["weapons"], False, False) is None:
+            return None
+        x, y = me["pos"][0], me["pos"][1]
+        foes = [m for m in obs["mechs"] if m["kind"] == "mech"]
+        z = obs["zone"]
+        best, bd = None, LASER_RUN_R
+        for i, it in self.mem.items.items():
+            if it.get("kind") != "pickup" or it.get("wkind") != "laser" or i in self.mem.banned:
+                continue
+            d = math.hypot(it["x"] - x, it["y"] - y)
+            if d >= bd or math.hypot(it["x"] - z["center"][0], it["y"] - z["center"][1]) > z["radius"] - 5:
+                continue
+            if any(math.hypot(m["pos"][0] - it["x"], m["pos"][1] - it["y"]) < LASER_RUN_CLEAR for m in foes):
+                continue
+            c = self.mem.reachable_cell(it)
+            if c < 0:
+                continue
+            best, bd = self.nav.center(c), d
+        return best
+
     def gear_harmless(self, me, m):
         """GEAR_FIRST: m hasn't hurt us much, carries no laser close by and isn't on top of us."""
         x, y = me["pos"][0], me["pos"][1]

@@ -279,7 +279,7 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
                     md = ALLIN_LOOT_R
                     skip = ("npc",) if me["hp"] < ALLIN_DRONE_HP * me["max_hp"] else ()
                 tid, _ = self.mem.best_target(me, zone, weapons, late, md, lambda ix, iy: self.danger(ix, iy, t), skip,
-                                              phase=self.phase,
+                                              phase=self.phase, now_t=t,
                                               laser_seek=(GEAR_LASER_SEEK_R if self.gearing else LASER_SEEK_R)
                                               if (LASER_SEEK and self.all_in) else 0.0,
                                               weapon_r=GEAR_WEAPON_R if self.gearing else 0.0,
@@ -341,6 +341,13 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             dgoal = math.hypot(vanish_goal[0] - x, vanish_goal[1] - y)
             stop_r = 1.5
             mode = "HIDDEN" if hidden else "VANISH"
+        elif LASER_RUN and self.all_in and self.laser_run_goal(obs, me, t) is not None:
+            # no laser yet and one lies in reach: it doubles our damage - go get it, even through a fight
+            g = self.laser_run_goal(obs, me, t)
+            self.set_goal(g, x, y)
+            dgoal = math.hypot(g[0] - x, g[1] - y)
+            stop_r = 1.0
+            mode = "LASERRUN"
         elif fight_m is not None and self.heal_drop_goal(obs, me, t) is not None:
             # hurt in a fight with a supply drop in reach: its full repair beats cover and beats the fight
             g, stop_r = self.heal_drop_goal(obs, me, t)
@@ -482,6 +489,8 @@ class Bot(MoveMixin, SensesMixin, DropsMixin, FightMixin, EvadeMixin, ArtilleryM
             move = [move[0] * VANISH_WALK, move[1] * VANISH_WALK]  # ... and no footsteps (under 5 m/s)
         if mode == "RUSH" and dgoal > 25.0 and me["energy"] > 30:
             boost = True  # finish rush: get there before it gets away / heals
+        if mode == "LASERRUN" and dgoal > 6.0 and me["energy"] > 15:
+            boost = True
         if mode == "HEALDROP" and dgoal > 6.0 and me["energy"] > 20:
             boost = True  # get to the drop's ring and start the capture
         if mode == "STRAFE" and getattr(self, "cm_boost", False):

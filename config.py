@@ -139,7 +139,7 @@ COMBAT_OTHERS_R = 170.0  # other enemies this close count (up to 3)
 COMBAT_DODGE_S = 0.7     # sidestep bullets that would hit us within this many seconds
 # modes that keep their own movement (retreat, finishing, cubes, escapes, drop contests, pursuit out of sight)
 COMBAT_MOVE_SKIP = ("RETREAT", "RUSH", "FIGHTCUBE", "FINISH", "ESCAPE", "CONTEST", "SNIPE", "PURSUE", "DISENGAGE",
-                    "HIDE", "HIDDEN", "VANISH", "drop", "DROPWATCH", "ZONE", "HEALDROP")  # ZONE: the circle run beats strafing
+                    "HIDE", "HIDDEN", "VANISH", "drop", "DROPWATCH", "ZONE", "HEALDROP", "LASERRUN")  # ZONE: the circle run beats strafing
 # ---- squad all in, the rest of the plan:
 # fight distance by what we hold (not the playbook bands): lightning (with energy) close, laser long, gun mid;
 # without lightning stay out of an enemy lightning's / mortar's comfort zone; drones at their own distance
@@ -210,7 +210,7 @@ FFA_END_WEAK = 0.3
 # squad all in, gear details: without a laser, one within GRAB_LASER_R is grabbed even mid-fight (swapping out lightning
 # / mortar); cubes stop pulling us once the stat bonus is capped (10), except on the way to the 15-cube upgrade
 GRAB_LASER = True
-GRAB_LASER_R = 40.0
+GRAB_LASER_R = 160.0
 CUBE_CAP_WANT = True
 CUBES_TO_15 = False    # (was on) past the 10-cube stat cap, no more cube detours, not even on the way to 15
 # squad all in: supply drops after all (full HP + 3 cubes), but only safe ones - within SAFE_DROP_R, nobody seen or heard
@@ -348,6 +348,15 @@ LASER_RELOAD_FRAC = 0.75  # hidden from a laser: reload below this fraction of a
 
 # ---- power: get stronger faster (cubes = +4% HP and damage each, up to 10), then be careful because we're bigger
 POWER = True
+# the laser doubles our damage: a laser we'd take outranks all other loot (LASER_PICK_V), even with enemies around it
+# or outside the next circle when there's time to get back; with none in hand, a known reachable one within
+# LASER_RUN_R is fetched even mid-fight, on boost (LASERRUN); mid-fight grabs reach GRAB_LASER_R
+LASER_PICK_V = 80.0
+LASER_RUN = True
+LASER_RUN_R = 300.0
+LASER_RUN_CLEAR = 0.0
+LASER_IGNORE_DANGER = True
+LASER_ZONE_LOOSE = True
 POWER_WEAPON_V = 12.0  # no laser/lightning yet: those pickups are worth this (a cube is 3), any phase ...
 POWER_DRONE_V = 9.0    # ... early phase: a drone is worth this (2 cubes, weak shooter; was 5) ...
 POWER_R = 180.0        # ... and both are gone for up to this far (other loot: the phase's normal range)
