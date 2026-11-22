@@ -95,8 +95,8 @@ FINISH_RUSH_R = {"gun": 18.0, "lightning": 22.0, "laser": 35.0}  # laser is hits
 # after none of that holds any more
 SQUAD_ALL_IN = True
 ALLIN_NEAR_R = 160.0
-ALLIN_TWO_HP = 0.55
-ALLIN_THREE_HP = 0.8
+ALLIN_TWO_HP = 0.45      # (0.55 until the brave-retreat build)
+ALLIN_THREE_HP = 0.7     # (0.8 until the brave-retreat build)
 ALLIN_LOW_HP = 0.35      # ... with the target at least 10 points of HP fraction above us
 ALLIN_TARGET_LOW = 0.25  # never retreat from a target below this (and us above 20%, at most 2 near)
 ALLIN_BACK_S = 1.5
