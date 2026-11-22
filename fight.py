@@ -18,13 +18,6 @@ class FightMixin:
         mz += me["stats"].get("muzzle_height", 7)
         px, py, pz = pos
         vx, vy, vz = vel if vel else (0.0, 0.0, 0.0)
-        lat = AIM_LATENCY if speed else 0.0
-        if lat:
-            # the bullet leaves ~lat s after this observation (an action covers 2 ticks): by then we've moved and
-            # it has moved - lead from there (the hitscan laser has its own LASER_LEAD_S)
-            sv = me.get("vel") or (0.0, 0.0, 0.0)
-            mx, my = mx + sv[0] * lat, my + sv[1] * lat
-            px, py = px + vx * k * lat, py + vy * k * lat
         vx, vy = vx * k, vy * k
         # falling (not jetting) target: gravity pulls it down during the flight; vertical lead isn't scaled by k
         g, gz = 0.0, -1e9

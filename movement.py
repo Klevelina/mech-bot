@@ -35,10 +35,9 @@ class MoveMixin:
         if PARK_EXPOSURE:
             # among the closest candidates, prefer corners/alcoves: few directions an enemy can see us from
             for s, c in cands[:60]:
-                tree = PARK_TREES and getattr(self, "situation", "") == "ffa"
-                e = self.expo.get((c, tree))
+                e = self.expo.get(c)
                 if e is None:
-                    e = self.expo[(c, tree)] = nav.exposure(c, canopy=tree)
+                    e = self.expo[c] = nav.exposure(c)
                 n_open, face = e
                 expo_w = EXPO_W * (POWER_BIG_EXPO if getattr(self, "big", False) else 1.0)
                 s += expo_w * n_open + (10.0 if n_open == 0 else 0.0)  # fully enclosed: can't see anyone coming

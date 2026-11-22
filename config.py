@@ -79,11 +79,11 @@ FOCUS_MAX_D = 240.0    # only targets this close
 # is coming at us, is badly hurt, or is aiming at us with a clear line - no "alone and odds 1.5" requirement.
 # Close to the band; if it ducks out of our line of fire, follow it until we see it again
 ENGAGE = True
-ENGAGE_BAND_MIN = 60.0   # "inside our band": its upper edge, but at least this many m
-ENGAGE_HIT_S = 6.0       # ... or it hit us this recently
-ENGAGE_CLOSING = (3.0, 180.0)  # ... or it comes at us faster than this (m/s) within this (m)
-ENGAGE_WEAK = (0.4, 160.0)    # ... or below this HP fraction within this
-ENGAGE_AIMED_R = 190.0   # ... or its torso points at us with a clear line between us, within this
+ENGAGE_BAND_MIN = 45.0   # "inside our band": its upper edge, but at least this many m
+ENGAGE_HIT_S = 5.0       # ... or it hit us this recently
+ENGAGE_CLOSING = (3.0, 150.0)  # ... or it comes at us faster than this (m/s) within this (m)
+ENGAGE_WEAK = (0.35, 150.0)    # ... or below this HP fraction within this
+ENGAGE_AIMED_R = 170.0   # ... or its torso points at us with a clear line between us, within this
 ENGAGE_MIN_HP = 0.4      # not below this HP fraction (our retreat / hide rules take over)
 # squad: finish rush - an enemy below FINISH_RUSH_HP of its max: get close (FINISH_RUSH_R by our weapon) and finish it,
 # while our HP is above FINISH_RUSH_MIN and at most 2 enemies are in sight within 150 m; boost in from further away
@@ -114,9 +114,7 @@ ALLIN_RECOVER_HI = 0.6
 ALLIN_COVER_R = 45.0     # retreat to a spot within this far that the enemies in sight can't see (else straight away)
 # laser: let go early when what's charged already kills the target (x margin), instead of giving it time to duck away
 LASER_KILLSHOT = True
-LASER_PRECHARGE = True       # all in: charge the laser while the target is behind cover (tracked) and hold it ...
-LASER_PRE_HOLD_S = 2.4       # ... this long from the start of the charge (it fires on its own at charge + 2 s)
-LASER_START_ERR = 0.6       # start a laser charge once the torso is within this (rad) of the aim (was ~3 body widths)
+LASER_START_ERR = 0.6        # start a laser charge once the torso is within this (rad) of the aim (was ~3 body widths)
 LASER_RELEASE_ON_AIM = True # a full laser is let go only with the torso on the target's body ...
 LASER_FULL_HOLD_S = 1.2      # ... or after holding it full this long (it fires on its own after 2 s)
 GUN_SLEW = True              # gun fires when one tick of torso turning puts the aim on the target's body
@@ -173,8 +171,8 @@ CUBE_UPGRADES_UNTIL = 10   # below this many cubes: plating and our weapon's dam
 # GEAR_HARM_DMG, no laser within GEAR_LASER_R, further than GEAR_CLOSE_R): they don't stop our looting and aren't
 # targets; weapons count from GEAR_WEAPON_R, lasers from GEAR_LASER_SEEK_R. Anyone else is fought as usual
 GEAR_FIRST = True
-GEAR_UNTIL = 60.0  # was 120: gear-up phase only the first minute
-GEAR_HARM_DMG = 60.0  # was 150: one hit and it's a fight
+GEAR_UNTIL = 120.0
+GEAR_HARM_DMG = 150.0
 GEAR_LASER_R = 170.0
 GEAR_CLOSE_R = 55.0
 GEAR_WEAPON_R = 400.0
@@ -241,7 +239,6 @@ CONTEST = True         # one mech capturing a drop, we reach the ring before it 
 CONTEST_MIN_HP = 0.25  # ... only above this HP fraction (0.5 in the 2.98 build; the fight odds cover the rest)
 CONTEST_MIN_HP_LATE = 0.5  # ... in the late phase (5 or fewer alive, or a small circle): the old floor
 CONTEST_MAX_DIST = 80.0  # ... and only this close (less open ground to cross); sniping has no distance limit
-PARK_TREES = True      # free-for-all: dense tree crowns count as cover when picking where to park (sight only)
 PARK_EXPOSURE = True   # park in corners/alcoves (few open directions) and face the open side
 EXPO_W = 6.0           # m of extra walking we accept per open direction avoided (of 12)
 HUNT = True            # one enemy in sight, nobody else on us, healthy: close to our weapon's range and fight
@@ -305,8 +302,7 @@ PHASE_MID_HEAL = 0.5   # mid, only holding lightning or mortar: heal at a corner
 PHASE_LATE_HEAL = 0.9  # late: heal whenever below this (HP decides the final collapse)
 
 # ---- aim per weapon / watching
-AIM_LATENCY = 0.075    # gun: our shot leaves about this long after the observation (target and we move on meanwhile)
-LASER_LEAD_S = 0.1    # laser fires on our next decision: aim where the target will be then
+LASER_LEAD_S = 0.1     # laser fires on our next decision: aim where the target will be then
 LIGHTNING_CLUSTER = True  # with lightning: prefer targets with other enemies within chain range
 OPEN_WATCH = True      # parked in the open (8+ of 12 directions) with enemies around: sweep the torso wider
 UPGRADE_BY_LOADOUT = True  # upgrade order depends on what we carry (loot.UPGRADES_FOR)
